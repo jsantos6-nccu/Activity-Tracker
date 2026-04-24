@@ -1,2 +1,94 @@
-# CHEM-5350-Term-Project
+# Local Activity Tracker
 
+A browser-based, mobile-friendly prototype for tracking work and personal activities with a simple Start/Stop workflow. All data is stored locally in the browser using `localStorage`, so the app can run privately without a backend, login, or database.
+
+## Features
+
+- Start and stop activities in real time
+- Enter an activity name, choose a category, and optionally add notes or tags
+- Create, edit, and remove custom groups and custom categories
+- Organize the app as `Group -> Category -> Activity -> Notes/Tags`
+- Save common activities to a Frequently Used list for one-tap starting
+- View a history of completed activities
+- Delete incorrect entries, restore them from a recently deleted list, or permanently remove them
+- Use tabs to switch between Frequently Used, Label Manager, Recently Deleted, and Analytics
+- Store activity data locally in the browser with `localStorage`
+- Filter reports by date range
+- See total tracked time, top groups, top categories, and simple visual summaries
+- Export saved logs as `CSV` or `JSON`
+- Use the app comfortably on desktop or phone-sized screens
+
+## File Structure
+
+- `index.html` - Main app layout
+- `styles.css` - Responsive styling and UI design
+- `app.js` - Activity tracking, storage, rendering, analytics, and export logic
+- `README.md` - Project overview and run instructions
+
+## How to Run Locally
+
+Because this is a plain HTML/CSS/JavaScript project, there is no build step.
+
+### Option 1: Open directly in a browser
+
+1. Open the project folder.
+2. Double-click `index.html`.
+3. The app will open in your default browser.
+
+### Option 2: Use a simple local server
+
+If you prefer running from a local server, you can use any lightweight option such as:
+
+- VS Code Live Server
+- `python -m http.server`
+
+Then open the local address shown by the server in your browser.
+
+## How the App Works
+
+1. Open the `Label Manager` tab and create at least one group, such as `Work`, `Personal`, or `Other`.
+2. Create one or more categories inside those groups, such as `House Chores`, `Homework`, `Teaching`, `Errands`, or `Exercise`.
+3. Enter an activity name.
+4. Choose one of your saved categories.
+5. Optionally add notes or tags.
+6. Click `Start Activity`.
+7. When finished, click `Stop Current`.
+8. Save recurring activities to the `Frequently Used` tab for future one-tap tracking.
+9. Review saved entries in the history panel.
+10. If you delete something by mistake, restore it from the `Recently Deleted` tab or permanently delete it there.
+11. Use the `Analytics` tab to filter by date range and by group.
+12. Export your data as `CSV` or `JSON` if needed.
+
+## Data Storage
+
+- Completed activities are saved in `localStorage`
+- Frequently Used presets are saved in `localStorage`
+- Group definitions are saved in `localStorage`
+- Category definitions are saved in `localStorage`
+- Recently deleted activities are also saved locally so they can be restored after a refresh
+- The currently running activity is also saved in `localStorage`
+- Refreshing the page will preserve the running timer state and saved history in the same browser
+- Data stays on the local machine unless the user exports it manually
+
+## Activity Data Model
+
+Each completed activity stores:
+
+- Group name
+- Activity name
+- Category name
+- Start time
+- End time
+- Duration
+- Notes or tags
+
+## Notes for Future Improvements
+
+This MVP is intentionally lightweight. Useful next steps could include:
+
+- Manual activity entry for past times
+- More detailed charts
+- Daily or weekly summaries
+- Search and tag filtering
+- Importing previously exported data
+- Drag-and-drop reordering for Frequently Used presets
