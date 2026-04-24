@@ -33,37 +33,85 @@
           <div id="statusPill" class="status-pill status-pill--idle">Idle</div>
         </div>
 
-        <form id="activityForm" class="tracker-form">
-          <label class="field">
-            <span>Activity name</span>
-            <input id="activityName" type="text" placeholder="Lecture prep, grading, walking, email..." maxlength="80" required>
-          </label>
-
-          <div class="field-grid">
-            <label class="field">
-              <span>Category</span>
-              <select id="activityCategory"></select>
-            </label>
-
-            <label class="field">
-              <span>Notes or tags</span>
-              <input id="activityNotes" type="text" placeholder="Optional: #meeting, urgent, lab">
-            </label>
-          </div>
-
-          <div class="button-row">
-            <button id="startButton" class="action-button action-button--start" type="submit">Start Activity</button>
-            <button id="savePresetButton" class="secondary-button secondary-button--strong" type="button">Save to Frequently Used</button>
-            <button id="cancelPresetEditButton" class="secondary-button" type="button" hidden>Cancel Edit</button>
-            <button id="stopButton" class="action-button action-button--stop" type="button">Stop Current</button>
-          </div>
-        </form>
-
-        <div id="currentActivityCard" class="current-card current-card--empty">
-          <p class="current-card__label">Current activity</p>
-          <h3>No activity is running</h3>
-          <p>When you tap Start, the timer begins immediately and stays saved locally in this browser.</p>
+        <div class="tab-bar tab-bar--compact" role="tablist" aria-label="Tracking modes">
+          <button class="tab-button is-active" id="trackerTabButtonLive" type="button" role="tab" aria-selected="true" aria-controls="trackerTabPanelLive" data-tracker-tab="live">Live Tracking</button>
+          <button class="tab-button" id="trackerTabButtonManual" type="button" role="tab" aria-selected="false" aria-controls="trackerTabPanelManual" data-tracker-tab="manual">Add Activity</button>
         </div>
+
+        <section id="trackerTabPanelLive" class="tracker-panel stack-layout" role="tabpanel" aria-labelledby="trackerTabButtonLive" data-tracker-tab-panel="live">
+          <form id="activityForm" class="tracker-form">
+            <label class="field">
+              <span>Activity name</span>
+              <input id="activityName" type="text" placeholder="Email, dishes, workout, planning..." maxlength="80" required>
+            </label>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Category</span>
+                <select id="activityCategory"></select>
+              </label>
+
+              <label class="field">
+                <span>Notes or tags</span>
+                <input id="activityNotes" type="text" placeholder="Optional: #meeting, focus, quick task">
+              </label>
+            </div>
+
+            <div class="button-row">
+              <button id="startButton" class="action-button action-button--start" type="submit">Start Activity</button>
+              <button id="pauseButton" class="secondary-button secondary-button--strong" type="button">Pause</button>
+              <button id="savePresetButton" class="secondary-button secondary-button--strong" type="button">Save to Frequently Used</button>
+              <button id="cancelPresetEditButton" class="secondary-button" type="button" hidden>Cancel Edit</button>
+              <button id="stopButton" class="action-button action-button--stop" type="button">Stop Current</button>
+            </div>
+          </form>
+
+          <div id="currentActivityCard" class="current-card current-card--empty">
+            <p class="current-card__label">Current activity</p>
+            <h3>No activity is running</h3>
+            <p>When you tap Start, the timer begins immediately and stays saved locally in this browser.</p>
+          </div>
+        </section>
+
+        <section id="trackerTabPanelManual" class="tracker-panel stack-layout" role="tabpanel" aria-labelledby="trackerTabButtonManual" data-tracker-tab-panel="manual" hidden>
+          <p id="manualActivityHelperText" class="history-summary">Add a completed activity manually if you forgot to log it in real time.</p>
+
+          <form id="manualActivityForm" class="tracker-form">
+            <label class="field">
+              <span>Activity name</span>
+              <input id="manualActivityName" type="text" placeholder="Homework, errands, meeting, reading..." maxlength="80" required>
+            </label>
+
+            <div class="field-grid">
+              <label class="field">
+                <span>Category</span>
+                <select id="manualActivityCategory"></select>
+              </label>
+
+              <label class="field">
+                <span>Notes or tags</span>
+                <input id="manualActivityNotes" type="text" placeholder="Optional: catch-up, travel, admin">
+              </label>
+            </div>
+
+            <div class="field-grid field-grid--equal">
+              <label class="field">
+                <span>Start date and time</span>
+                <input id="manualStartTime" type="datetime-local" required>
+              </label>
+
+              <label class="field">
+                <span>End date and time</span>
+                <input id="manualEndTime" type="datetime-local" required>
+              </label>
+            </div>
+
+            <div class="button-row">
+              <button id="saveManualActivityButton" class="action-button action-button--start" type="submit">Save Activity</button>
+              <button id="cancelManualEditButton" class="secondary-button" type="button" hidden>Cancel Edit</button>
+            </div>
+          </form>
+        </section>
       </section>
 
       <section class="panel">
@@ -137,52 +185,103 @@
         </section>
 
         <section id="tabPanelAnalytics" class="tab-panel stack-layout" role="tabpanel" aria-labelledby="tabButtonAnalytics" data-tab-panel="analytics" hidden>
-          <div class="filters">
-            <label class="field">
-              <span>From</span>
-              <input id="startDateFilter" type="date">
-            </label>
-            <label class="field">
-              <span>To</span>
-              <input id="endDateFilter" type="date">
-            </label>
-            <label class="field">
-              <span>Report scope</span>
-              <select id="scopeFilter"></select>
-            </label>
-            <button id="resetFiltersButton" class="secondary-button secondary-button--wide" type="button">Reset Filters</button>
+          <div class="tab-bar tab-bar--compact" role="tablist" aria-label="Analytics views">
+            <button class="tab-button is-active" id="analyticsSubtabButtonOverview" type="button" role="tab" aria-selected="true" aria-controls="analyticsSubtabPanelOverview" data-analytics-subtab="overview">Overview</button>
+            <button class="tab-button" id="analyticsSubtabButtonDaily" type="button" role="tab" aria-selected="false" aria-controls="analyticsSubtabPanelDaily" data-analytics-subtab="daily">Daily Detail</button>
           </div>
 
-          <div class="stats-grid">
-            <article class="stat-card">
-              <p>Total tracked</p>
-              <strong id="totalTimeStat">0m</strong>
-            </article>
-            <article class="stat-card">
-              <p>Activities</p>
-              <strong id="activityCountStat">0</strong>
-            </article>
-            <article class="stat-card">
-              <p>Top group</p>
-              <strong id="topGroupStat">-</strong>
-            </article>
-            <article class="stat-card">
-              <p>Top category</p>
-              <strong id="topCategoryStat">-</strong>
-            </article>
-          </div>
+          <section id="analyticsSubtabPanelOverview" class="analytics-subtab stack-layout" role="tabpanel" aria-labelledby="analyticsSubtabButtonOverview" data-analytics-subtab-panel="overview">
+            <div class="filters">
+              <label class="field">
+                <span>From</span>
+                <input id="startDateFilter" type="date">
+              </label>
+              <label class="field">
+                <span>To</span>
+                <input id="endDateFilter" type="date">
+              </label>
+              <label class="field">
+                <span>Report scope</span>
+                <select id="scopeFilter"></select>
+              </label>
+              <button id="resetFiltersButton" class="secondary-button secondary-button--wide" type="button">Reset Filters</button>
+            </div>
 
-          <div class="analytics-grid">
-            <section class="analytics-card">
-              <h3>Category breakdown</h3>
-              <div id="categoryBreakdown" class="breakdown-list"></div>
-            </section>
+            <div class="stats-grid">
+              <article class="stat-card">
+                <p>Total tracked</p>
+                <strong id="totalTimeStat" class="stat-card__value stat-card__value--fit">0m</strong>
+              </article>
+              <article class="stat-card">
+                <p>Activities</p>
+                <strong id="activityCountStat" class="stat-card__value stat-card__value--fit">0</strong>
+              </article>
+              <article class="stat-card">
+                <p>Top group</p>
+                <strong id="topGroupStat" class="stat-card__value stat-card__value--fit">-</strong>
+              </article>
+              <article class="stat-card">
+                <p>Top category</p>
+                <strong id="topCategoryStat" class="stat-card__value stat-card__value--fit">-</strong>
+              </article>
+            </div>
 
-            <section class="analytics-card">
-              <h3>Visual summary</h3>
-              <div id="chartContainer" class="chart-container"></div>
-            </section>
-          </div>
+            <div class="analytics-grid">
+              <section class="analytics-card">
+                <h3>Category breakdown</h3>
+                <div id="categoryBreakdown" class="breakdown-list"></div>
+              </section>
+
+              <section class="analytics-card">
+                <h3>Visual summary</h3>
+                <div id="chartContainer" class="chart-container"></div>
+              </section>
+            </div>
+          </section>
+
+          <section id="analyticsSubtabPanelDaily" class="analytics-subtab stack-layout" role="tabpanel" aria-labelledby="analyticsSubtabButtonDaily" data-analytics-subtab-panel="daily" hidden>
+            <div class="filters filters--daily">
+              <label class="field">
+                <span>Day</span>
+                <input id="dailyDateFilter" type="date">
+              </label>
+              <label class="field">
+                <span>Group filter</span>
+                <select id="dailyScopeFilter"></select>
+              </label>
+            </div>
+
+            <div class="stats-grid">
+              <article class="stat-card">
+                <p>Tracked that day</p>
+                <strong id="dailyTotalTimeStat" class="stat-card__value stat-card__value--fit">0m</strong>
+              </article>
+              <article class="stat-card">
+                <p>Activities</p>
+                <strong id="dailyActivityCountStat" class="stat-card__value stat-card__value--fit">0</strong>
+              </article>
+              <article class="stat-card">
+                <p>First activity</p>
+                <strong id="dailyFirstActivityStat" class="stat-card__value stat-card__value--fit">-</strong>
+              </article>
+              <article class="stat-card">
+                <p>Last activity</p>
+                <strong id="dailyLastActivityStat" class="stat-card__value stat-card__value--fit">-</strong>
+              </article>
+            </div>
+
+            <div class="analytics-grid">
+              <section class="analytics-card">
+                <h3>Day breakdown</h3>
+                <div id="dailyBreakdown" class="breakdown-list"></div>
+              </section>
+
+              <section class="analytics-card">
+                <h3>Timeline</h3>
+                <div id="dailyTimeline" class="history-list"></div>
+              </section>
+            </div>
+          </section>
         </section>
       </section>
 

@@ -3,9 +3,12 @@
   --bg-accent: #efe2cf;
   --surface: rgba(255, 251, 245, 0.94);
   --surface-strong: #fffdfa;
+  --surface-soft: rgba(245, 239, 231, 0.96);
+  --surface-soft-strong: rgba(242, 236, 228, 0.98);
   --text: #22201c;
   --muted: #6f6557;
   --border: rgba(81, 60, 33, 0.12);
+  --border-strong: rgba(81, 60, 33, 0.24);
   --shadow: 0 18px 40px rgba(82, 58, 25, 0.12);
   --work: #1f6f5f;
   --personal: #d06e31;
@@ -108,8 +111,8 @@ select {
   gap: 0.5rem;
   padding: 0.7rem 1rem;
   border-radius: 999px;
-  background: rgba(255, 253, 250, 0.85);
-  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  border: 1.5px solid var(--border-strong);
   white-space: nowrap;
 }
 
@@ -170,6 +173,11 @@ select {
   background: var(--success);
 }
 
+.status-pill--paused {
+  color: #fff;
+  background: linear-gradient(135deg, #9d6a18, #c0841d);
+}
+
 .tracker-form,
 .filters,
 .stack-layout {
@@ -183,6 +191,14 @@ select {
 }
 
 .tab-panel[hidden] {
+  display: none;
+}
+
+.tracker-panel[hidden] {
+  display: none;
+}
+
+.analytics-subtab[hidden] {
   display: none;
 }
 
@@ -212,8 +228,8 @@ select {
   min-height: 3rem;
   padding: 0.85rem 0.95rem;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(81, 60, 33, 0.16);
-  background: var(--surface-strong);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-soft-strong);
   color: var(--text);
 }
 
@@ -237,12 +253,16 @@ select {
   margin-bottom: 1rem;
 }
 
+.tab-bar--compact {
+  margin-bottom: 1.1rem;
+}
+
 .tab-button {
   min-height: 2.8rem;
   padding: 0.75rem 1rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: rgba(255, 253, 250, 0.88);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-soft-strong);
   color: var(--text);
   cursor: pointer;
 }
@@ -293,8 +313,8 @@ select {
   min-height: 2.8rem;
   padding: 0.75rem 1rem;
   color: var(--text);
-  background: rgba(255, 253, 250, 0.88);
-  border: 1px solid var(--border);
+  background: var(--surface-soft-strong);
+  border: 1.5px solid var(--border-strong);
 }
 
 .secondary-button--strong {
@@ -309,12 +329,16 @@ select {
   margin-top: 1rem;
   padding: 1.1rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  border: 1.5px solid var(--border-strong);
 }
 
 .current-card--running {
-  background: linear-gradient(135deg, rgba(31, 111, 95, 0.1), rgba(255, 255, 255, 0.82));
+  background: linear-gradient(135deg, rgba(31, 111, 95, 0.1), var(--surface-soft-strong));
+}
+
+.current-card--paused {
+  background: linear-gradient(135deg, rgba(192, 132, 29, 0.12), var(--surface-soft-strong));
 }
 
 .current-card--empty {
@@ -390,8 +414,8 @@ select {
 .chart-row {
   padding: 1rem;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  border: 1.5px solid var(--border-strong);
 }
 
 .history-item__top,
@@ -435,14 +459,14 @@ select {
   min-height: 2.5rem;
   padding: 0.65rem 0.95rem;
   border-radius: 14px;
-  border: 1px solid var(--border);
-  background: rgba(255, 253, 250, 0.92);
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-soft-strong);
   color: var(--text);
   cursor: pointer;
 }
 
 .mini-button--neutral {
-  background: rgba(255, 253, 250, 0.96);
+  background: var(--surface-soft-strong);
 }
 
 .mini-button--muted {
@@ -486,8 +510,8 @@ select {
 .analytics-card {
   padding: 1rem;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  border: 1.5px solid var(--border-strong);
 }
 
 .stat-card p {
@@ -496,7 +520,20 @@ select {
 }
 
 .stat-card strong {
-  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-size: clamp(1.15rem, 2.5vw, 1.9rem);
+}
+
+.stat-card__value {
+  display: block;
+  max-width: 100%;
+  line-height: 1.08;
+}
+
+.stat-card__value--text {
+  font-size: clamp(0.95rem, 1.9vw, 1.4rem);
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: normal;
 }
 
 .analytics-grid {
@@ -525,8 +562,8 @@ select {
   padding: 1.1rem;
   border-radius: 16px;
   color: var(--muted);
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed rgba(81, 60, 33, 0.2);
+  background: rgba(241, 235, 227, 0.96);
+  border: 1.5px dashed rgba(81, 60, 33, 0.28);
 }
 
 @media (max-width: 900px) {

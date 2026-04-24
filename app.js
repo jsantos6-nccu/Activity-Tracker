@@ -27,9 +27,12 @@ const state = {
   currentActivity: null,
   timerId: null,
   editingPresetId: null,
+  editingActivityId: null,
   editingGroupId: null,
   editingCategoryId: null,
-  activeTab: "presets"
+  activeTab: "presets",
+  activeTrackerTab: "live",
+  activeAnalyticsSubtab: "overview"
 };
 
 const elements = {
@@ -37,7 +40,17 @@ const elements = {
   activityName: document.getElementById("activityName"),
   activityCategory: document.getElementById("activityCategory"),
   activityNotes: document.getElementById("activityNotes"),
+  manualActivityForm: document.getElementById("manualActivityForm"),
+  manualActivityName: document.getElementById("manualActivityName"),
+  manualActivityCategory: document.getElementById("manualActivityCategory"),
+  manualActivityNotes: document.getElementById("manualActivityNotes"),
+  manualStartTime: document.getElementById("manualStartTime"),
+  manualEndTime: document.getElementById("manualEndTime"),
+  manualActivityHelperText: document.getElementById("manualActivityHelperText"),
+  saveManualActivityButton: document.getElementById("saveManualActivityButton"),
+  cancelManualEditButton: document.getElementById("cancelManualEditButton"),
   startButton: document.getElementById("startButton"),
+  pauseButton: document.getElementById("pauseButton"),
   savePresetButton: document.getElementById("savePresetButton"),
   cancelPresetEditButton: document.getElementById("cancelPresetEditButton"),
   stopButton: document.getElementById("stopButton"),
@@ -65,13 +78,25 @@ const elements = {
   startDateFilter: document.getElementById("startDateFilter"),
   endDateFilter: document.getElementById("endDateFilter"),
   scopeFilter: document.getElementById("scopeFilter"),
+  dailyDateFilter: document.getElementById("dailyDateFilter"),
+  dailyScopeFilter: document.getElementById("dailyScopeFilter"),
   resetFiltersButton: document.getElementById("resetFiltersButton"),
   totalTimeStat: document.getElementById("totalTimeStat"),
   activityCountStat: document.getElementById("activityCountStat"),
   topGroupStat: document.getElementById("topGroupStat"),
   topCategoryStat: document.getElementById("topCategoryStat"),
+  dailyTotalTimeStat: document.getElementById("dailyTotalTimeStat"),
+  dailyActivityCountStat: document.getElementById("dailyActivityCountStat"),
+  dailyFirstActivityStat: document.getElementById("dailyFirstActivityStat"),
+  dailyLastActivityStat: document.getElementById("dailyLastActivityStat"),
   categoryBreakdown: document.getElementById("categoryBreakdown"),
   chartContainer: document.getElementById("chartContainer"),
+  dailyBreakdown: document.getElementById("dailyBreakdown"),
+  dailyTimeline: document.getElementById("dailyTimeline"),
+  trackerTabButtons: Array.from(document.querySelectorAll("[data-tracker-tab]")),
+  trackerTabPanels: Array.from(document.querySelectorAll("[data-tracker-tab-panel]")),
+  analyticsSubtabButtons: Array.from(document.querySelectorAll("[data-analytics-subtab]")),
+  analyticsSubtabPanels: Array.from(document.querySelectorAll("[data-analytics-subtab-panel]")),
   tabButtons: Array.from(document.querySelectorAll("[data-tab]")),
   tabPanels: Array.from(document.querySelectorAll("[data-tab-panel]"))
 };
@@ -81,12 +106,14 @@ document.addEventListener("DOMContentLoaded", init);
 function init() {
   loadState();
   setDefaultFilters();
+  setDefaultDailyFilter();
+  setDefaultManualTimes();
   bindEvents();
   renderAll();
 
   // Refresh the live timer every second while an activity is running.
   state.timerId = window.setInterval(() => {
-    if (state.currentActivity) {
+    if (state.currentActivity && state.currentActivity.status !== "paused") {
       renderCurrentActivity();
     }
   }, 1000);
@@ -94,6 +121,9 @@ function init() {
 
 function bindEvents() {
   elements.activityForm.addEventListener("submit", handleStartActivity);
+  elements.manualActivityForm.addEventListener("submit", handleSaveManualActivity);
+  elements.cancelManualEditButton.addEventListener("click", handleCancelManualEdit);
+  elements.pauseButton.addEventListener("click", handleTogglePauseActivity);
   elements.savePresetButton.addEventListener("click", handleSavePreset);
   elements.cancelPresetEditButton.addEventListener("click", clearPresetEditingState);
   elements.saveGroupButton.addEventListener("click", handleSaveGroup);
@@ -111,13 +141,22 @@ function bindEvents() {
   elements.startDateFilter.addEventListener("change", renderAnalytics);
   elements.endDateFilter.addEventListener("change", renderAnalytics);
   elements.scopeFilter.addEventListener("change", renderAnalytics);
+  elements.dailyDateFilter.addEventListener("change", renderDailyAnalytics);
+  elements.dailyScopeFilter.addEventListener("change", renderDailyAnalytics);
   elements.resetFiltersButton.addEventListener("click", () => {
     setDefaultFilters();
     renderAnalytics();
   });
+  elements.trackerTabButtons.forEach((button) => {
+    button.addEventListener("click", () => switchTrackerTab(button.dataset.trackerTab));
+  });
+  elements.analyticsSubtabButtons.forEach((button) => {
+    button.addEventListener("click", () => switchAnalyticsSubtab(button.dataset.analyticsSubtab));
+  });
   elements.tabButtons.forEach((button) => {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
   });
+  window.addEventListener("resize", handleWindowResize);
 }
 
 function loadState() {
@@ -267,7 +306,14 @@ function normalizeStoredCurrentActivity(activity) {
     return null;
   }
 
-  return normalizeCategoryReference(activity);
+  const normalized = normalizeCategoryReference(activity);
+  return {
+    ...normalized,
+    status: normalized.status === "paused" ? "paused" : "running",
+    elapsedMsBeforePause: Number.isFinite(normalized.elapsedMsBeforePause) ? normalized.elapsedMsBeforePause : 0,
+    lastResumedAt: normalized.lastResumedAt || normalized.startTime,
+    pausedAt: normalized.pausedAt || null
+  };
 }
 
 function normalizeCategoryReference(item) {
@@ -343,6 +389,56 @@ function setDefaultFilters() {
   elements.endDateFilter.value = toDateInputValue(today);
 }
 
+function setDefaultDailyFilter() {
+  elements.dailyDateFilter.value = toDateInputValue(new Date());
+}
+
+function setDefaultManualTimes() {
+  const end = new Date();
+  const start = new Date(end.getTime() - (60 * 60 * 1000));
+
+  elements.manualStartTime.value = toDateTimeInputValue(start);
+  elements.manualEndTime.value = toDateTimeInputValue(end);
+}
+
+function switchTrackerTab(tabName) {
+  state.activeTrackerTab = tabName;
+  renderTrackerTabState();
+}
+
+function renderTrackerTabState() {
+  elements.trackerTabButtons.forEach((button) => {
+    const isActive = button.dataset.trackerTab === state.activeTrackerTab;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  elements.trackerTabPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.trackerTabPanel !== state.activeTrackerTab;
+  });
+}
+
+function switchAnalyticsSubtab(tabName) {
+  state.activeAnalyticsSubtab = tabName;
+  renderAnalyticsSubtabState();
+}
+
+function renderAnalyticsSubtabState() {
+  elements.analyticsSubtabButtons.forEach((button) => {
+    const isActive = button.dataset.analyticsSubtab === state.activeAnalyticsSubtab;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+
+  elements.analyticsSubtabPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.analyticsSubtabPanel !== state.activeAnalyticsSubtab;
+  });
+
+  if (state.activeTab === "analytics") {
+    window.requestAnimationFrame(fitAnalyticsStatValues);
+  }
+}
+
 function switchTab(tabName) {
   state.activeTab = tabName;
   renderTabState();
@@ -358,12 +454,19 @@ function renderTabState() {
   elements.tabPanels.forEach((panel) => {
     panel.hidden = panel.dataset.tabPanel !== state.activeTab;
   });
+
+  if (state.activeTab === "analytics") {
+    renderAnalyticsSubtabState();
+    window.requestAnimationFrame(fitAnalyticsStatValues);
+  }
 }
 
 function renderAll() {
   renderCategoryOptions();
   renderGroupOptions();
   renderScopeOptions();
+  renderAnalyticsSubtabState();
+  renderTrackerTabState();
   renderTabState();
   renderGroups();
   renderCategories();
@@ -372,23 +475,32 @@ function renderAll() {
   renderHistory();
   renderDeletedActivities();
   renderAnalytics();
+  renderDailyAnalytics();
 }
 
 function renderCategoryOptions() {
-  const selectedValue = elements.activityCategory.value;
+  const liveSelectedValue = elements.activityCategory.value;
+  const manualSelectedValue = elements.manualActivityCategory.value;
 
   if (!state.categories.length) {
     elements.activityCategory.innerHTML = `<option value="">Create a category first</option>`;
     elements.activityCategory.value = "";
+    elements.manualActivityCategory.innerHTML = `<option value="">Create a category first</option>`;
+    elements.manualActivityCategory.value = "";
     return;
   }
 
-  elements.activityCategory.innerHTML = state.categories
+  const optionMarkup = state.categories
     .map((category) => `<option value="${category.id}">${escapeHtml(category.name)} (${escapeHtml(category.groupName || "Ungrouped")})</option>`)
     .join("");
 
-  const optionExists = state.categories.some((category) => category.id === selectedValue);
-  elements.activityCategory.value = optionExists ? selectedValue : state.categories[0].id;
+  elements.activityCategory.innerHTML = optionMarkup;
+  elements.manualActivityCategory.innerHTML = optionMarkup;
+
+  const liveOptionExists = state.categories.some((category) => category.id === liveSelectedValue);
+  const manualOptionExists = state.categories.some((category) => category.id === manualSelectedValue);
+  elements.activityCategory.value = liveOptionExists ? liveSelectedValue : state.categories[0].id;
+  elements.manualActivityCategory.value = manualOptionExists ? manualSelectedValue : state.categories[0].id;
 }
 
 function renderGroupOptions() {
@@ -410,6 +522,7 @@ function renderGroupOptions() {
 
 function renderScopeOptions() {
   const selectedValue = elements.scopeFilter.value || "All";
+  const dailySelectedValue = elements.dailyScopeFilter.value || "All";
   const groupNames = new Set(state.groups.map((group) => group.name));
 
   state.activities.forEach((activity) => {
@@ -423,8 +536,11 @@ function renderScopeOptions() {
     options.push(`<option value="${escapeHtml(groupName)}">${escapeHtml(groupName)} only</option>`);
   });
 
-  elements.scopeFilter.innerHTML = options.join("");
+  const markup = options.join("");
+  elements.scopeFilter.innerHTML = markup;
+  elements.dailyScopeFilter.innerHTML = markup;
   elements.scopeFilter.value = [...groupNames].includes(selectedValue) || selectedValue === "All" ? selectedValue : "All";
+  elements.dailyScopeFilter.value = [...groupNames].includes(dailySelectedValue) || dailySelectedValue === "All" ? dailySelectedValue : "All";
 }
 
 function renderGroups() {
@@ -515,13 +631,17 @@ function renderPresets() {
 }
 
 function renderCurrentActivity() {
-  const isRunning = Boolean(state.currentActivity);
-  elements.statusPill.textContent = isRunning ? "Tracking now" : "Idle";
-  elements.statusPill.className = `status-pill ${isRunning ? "status-pill--running" : "status-pill--idle"}`;
-  elements.startButton.disabled = isRunning;
-  elements.stopButton.disabled = !isRunning;
+  const hasCurrentActivity = Boolean(state.currentActivity);
+  const isPaused = hasCurrentActivity && state.currentActivity.status === "paused";
+  const isRunning = hasCurrentActivity && !isPaused;
+  elements.statusPill.textContent = hasCurrentActivity ? (isPaused ? "Paused" : "Tracking now") : "Idle";
+  elements.statusPill.className = `status-pill ${hasCurrentActivity ? (isPaused ? "status-pill--paused" : "status-pill--running") : "status-pill--idle"}`;
+  elements.startButton.disabled = hasCurrentActivity;
+  elements.pauseButton.disabled = !hasCurrentActivity;
+  elements.pauseButton.textContent = isPaused ? "Resume" : "Pause";
+  elements.stopButton.disabled = !hasCurrentActivity;
 
-  if (!isRunning) {
+  if (!hasCurrentActivity) {
     elements.currentActivityCard.className = "current-card current-card--empty";
     elements.currentActivityCard.innerHTML = `
       <p class="current-card__label">Current activity</p>
@@ -532,13 +652,14 @@ function renderCurrentActivity() {
   }
 
   const running = state.currentActivity;
-  const elapsedMs = Date.now() - new Date(running.startTime).getTime();
+  const elapsedMs = getCurrentActivityElapsedMs(running);
 
-  elements.currentActivityCard.className = "current-card current-card--running";
+  elements.currentActivityCard.className = `current-card ${isPaused ? "current-card--paused" : "current-card--running"}`;
   elements.currentActivityCard.innerHTML = `
     <p class="current-card__label">Current activity</p>
     <h3>${escapeHtml(running.name)}</h3>
-    <p>Started ${formatDateTime(running.startTime)} and has been running for <strong>${formatDuration(elapsedMs)}</strong>.</p>
+    <p>Started ${formatDateTime(running.startTime)} and has ${isPaused ? "tracked" : "been running for"} <strong>${formatDuration(elapsedMs)}</strong>.</p>
+    <p>${isPaused ? `Paused ${formatDateTime(running.pausedAt)}.` : "Timer is actively counting."}</p>
     <div class="current-metadata">
       ${renderCategoryBadge(running.categoryName, running.groupName)}
       ${renderGroupTag(running.groupName)}
@@ -573,6 +694,7 @@ function renderHistory() {
           ${activity.notes ? `<span class="tag">${escapeHtml(activity.notes)}</span>` : ""}
         </div>
         <div class="history-item__actions">
+          <button class="mini-button mini-button--neutral" type="button" data-action="edit" data-id="${activity.id}">Edit</button>
           <button class="mini-button mini-button--danger" type="button" data-action="delete" data-id="${activity.id}">Delete</button>
         </div>
       </article>
@@ -635,6 +757,90 @@ function renderAnalytics() {
   }
 
   elements.chartContainer.innerHTML = createChartMarkup(groupTotals, totalMs);
+
+  if (state.activeTab === "analytics" && state.activeAnalyticsSubtab === "overview") {
+    window.requestAnimationFrame(fitAnalyticsStatValues);
+  }
+}
+
+function handleWindowResize() {
+  if (state.activeTab === "analytics") {
+    window.requestAnimationFrame(fitAnalyticsStatValues);
+  }
+}
+
+function fitAnalyticsStatValues() {
+  const overviewStats = [
+    elements.totalTimeStat,
+    elements.activityCountStat,
+    elements.topGroupStat,
+    elements.topCategoryStat
+  ];
+  const dailyStats = [
+    elements.dailyTotalTimeStat,
+    elements.dailyActivityCountStat,
+    elements.dailyFirstActivityStat,
+    elements.dailyLastActivityStat
+  ];
+
+  overviewStats.forEach((element) => fitStatText(element));
+  dailyStats.forEach((element) => fitStatText(element));
+}
+
+function fitStatText(element) {
+  if (!element || element.clientWidth === 0) {
+    return;
+  }
+
+  const text = element.textContent.trim();
+  element.style.fontSize = "";
+  const minimumFontSize = 12;
+  const isPhrase = /\s/.test(text);
+  const startingFontSize = parseFloat(window.getComputedStyle(element).fontSize);
+
+  element.style.whiteSpace = isPhrase ? "normal" : "nowrap";
+  element.style.wordBreak = "normal";
+  element.style.overflowWrap = "normal";
+
+  let fontSize = startingFontSize;
+
+  while (
+    fontSize > minimumFontSize &&
+    (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1)
+  ) {
+    fontSize -= 0.5;
+    element.style.fontSize = `${fontSize}px`;
+  }
+}
+
+function renderDailyAnalytics() {
+  const selectedDate = elements.dailyDateFilter.value;
+  const filtered = getDailyActivities(selectedDate, elements.dailyScopeFilter.value || "All");
+  const totalMs = filtered.reduce((sum, activity) => sum + activity.durationMs, 0);
+  const firstActivity = filtered[0] || null;
+  const lastActivity = filtered[filtered.length - 1] || null;
+  const categoryTotals = getNamedCategoryTotals(filtered);
+
+  elements.dailyTotalTimeStat.textContent = formatDuration(totalMs);
+  elements.dailyActivityCountStat.textContent = String(filtered.length);
+  elements.dailyFirstActivityStat.textContent = firstActivity ? firstActivity.categoryName : "-";
+  elements.dailyLastActivityStat.textContent = lastActivity ? lastActivity.categoryName : "-";
+
+  if (!filtered.length) {
+    elements.dailyBreakdown.innerHTML = `<div class="empty-state">No activities were saved for the selected day.</div>`;
+    elements.dailyTimeline.innerHTML = `<div class="empty-state">Your chosen day will show a timeline here once activities are available.</div>`;
+  } else {
+    elements.dailyBreakdown.innerHTML = categoryTotals
+      .map((categoryTotal) => createBreakdownMarkup(categoryTotal, totalMs))
+      .join("");
+    elements.dailyTimeline.innerHTML = filtered
+      .map((activity) => createDailyTimelineMarkup(activity))
+      .join("");
+  }
+
+  if (state.activeTab === "analytics" && state.activeAnalyticsSubtab === "daily") {
+    window.requestAnimationFrame(fitAnalyticsStatValues);
+  }
 }
 
 function getFilteredActivities() {
@@ -650,6 +856,25 @@ function getFilteredActivities() {
 
     return matchesStart && matchesEnd && matchesScope;
   });
+}
+
+function getDailyActivities(dateValue, scope) {
+  if (!dateValue) {
+    return [];
+  }
+
+  const startDate = new Date(`${dateValue}T00:00:00`);
+  const endDate = new Date(`${dateValue}T23:59:59`);
+
+  return state.activities
+    .filter((activity) => {
+      const activityStart = new Date(activity.startTime);
+      const matchesDate = activityStart >= startDate && activityStart <= endDate;
+      const matchesScope = scope === "All" || activity.groupName === scope;
+
+      return matchesDate && matchesScope;
+    })
+    .sort((left, right) => new Date(left.startTime).getTime() - new Date(right.startTime).getTime());
 }
 
 function getGroupTotals(activities) {
@@ -737,6 +962,25 @@ function createChartMarkup(groupTotals, totalMs) {
     .join("");
 }
 
+function createDailyTimelineMarkup(activity) {
+  return `
+    <article class="history-item">
+      <div class="history-item__top">
+        <div>
+          <h3>${escapeHtml(activity.name)}</h3>
+          <p>${formatTimeOnly(activity.startTime)} to ${formatTimeOnly(activity.endTime)}</p>
+        </div>
+        <strong>${formatDuration(activity.durationMs)}</strong>
+      </div>
+      <div class="history-item__meta">
+        ${renderCategoryBadge(activity.categoryName, activity.groupName)}
+        ${renderGroupTag(activity.groupName)}
+        ${activity.notes ? `<span class="tag">${escapeHtml(activity.notes)}</span>` : ""}
+      </div>
+    </article>
+  `;
+}
+
 function getFormValues() {
   const selectedCategory = findCategoryById(elements.activityCategory.value);
 
@@ -751,6 +995,25 @@ function getFormValues() {
     categoryName: selectedCategory.name,
     groupId: selectedCategory.groupId,
     groupName: selectedCategory.groupName
+  };
+}
+
+function getManualFormValues() {
+  const selectedCategory = findCategoryById(elements.manualActivityCategory.value);
+
+  if (!selectedCategory) {
+    return null;
+  }
+
+  return {
+    name: elements.manualActivityName.value.trim(),
+    notes: elements.manualActivityNotes.value.trim(),
+    categoryId: selectedCategory.id,
+    categoryName: selectedCategory.name,
+    groupId: selectedCategory.groupId,
+    groupName: selectedCategory.groupName,
+    startTime: elements.manualStartTime.value,
+    endTime: elements.manualEndTime.value
   };
 }
 
@@ -780,23 +1043,109 @@ function handleStartActivity(event) {
   startActivity(activityData);
 }
 
+function handleTogglePauseActivity() {
+  if (!state.currentActivity) {
+    window.alert("There is no running activity to pause or resume.");
+    return;
+  }
+
+  if (state.currentActivity.status === "paused") {
+    state.currentActivity.status = "running";
+    state.currentActivity.lastResumedAt = new Date().toISOString();
+    state.currentActivity.pausedAt = null;
+  } else {
+    const now = new Date().toISOString();
+    state.currentActivity.elapsedMsBeforePause = getCurrentActivityElapsedMs(state.currentActivity, now);
+    state.currentActivity.status = "paused";
+    state.currentActivity.pausedAt = now;
+    state.currentActivity.lastResumedAt = null;
+  }
+
+  saveCurrentActivity();
+  renderAll();
+}
+
+function handleSaveManualActivity(event) {
+  event.preventDefault();
+
+  const activityData = getManualFormValues();
+
+  if (!activityData) {
+    window.alert("Create at least one category first.");
+    switchTab("categories");
+    elements.categoryNameInput.focus();
+    return;
+  }
+
+  if (!activityData.name) {
+    window.alert("Enter an activity name before saving it.");
+    elements.manualActivityName.focus();
+    return;
+  }
+
+  if (!activityData.startTime || !activityData.endTime) {
+    window.alert("Enter both a start time and an end time.");
+    return;
+  }
+
+  const startTime = new Date(activityData.startTime);
+  const endTime = new Date(activityData.endTime);
+
+  if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
+    window.alert("Enter valid start and end times.");
+    return;
+  }
+
+  if (endTime <= startTime) {
+    window.alert("The end time must be later than the start time.");
+    elements.manualEndTime.focus();
+    return;
+  }
+
+  const activityRecord = {
+    name: activityData.name,
+    notes: activityData.notes,
+    categoryId: activityData.categoryId,
+    categoryName: activityData.categoryName,
+    groupId: activityData.groupId,
+    groupName: activityData.groupName,
+    startTime: startTime.toISOString(),
+    endTime: endTime.toISOString()
+  };
+
+  if (state.editingActivityId) {
+    const wasUpdated = updateCompletedActivity(state.editingActivityId, activityRecord);
+
+    if (!wasUpdated) {
+      window.alert("That activity could not be found. It may have been deleted already.");
+      clearManualEditingState();
+      clearManualForm();
+      renderAll();
+      return;
+    }
+  } else {
+    addCompletedActivity(activityRecord);
+  }
+
+  clearManualEditingState();
+  clearManualForm();
+  renderAll();
+}
+
 function handleStopActivity() {
   if (!state.currentActivity) {
     window.alert("There is no running activity to stop.");
     return;
   }
 
-  const endTime = new Date().toISOString();
-  const durationMs = new Date(endTime).getTime() - new Date(state.currentActivity.startTime).getTime();
-
-  state.activities.unshift({
+  const now = new Date().toISOString();
+  addCompletedActivity({
     ...state.currentActivity,
-    endTime,
-    durationMs
+    startTime: state.currentActivity.startTime,
+    endTime: now,
+    durationMsOverride: getCurrentActivityElapsedMs(state.currentActivity, now)
   });
-
   state.currentActivity = null;
-  saveActivities();
   saveCurrentActivity();
   clearForm();
   renderAll();
@@ -949,11 +1298,39 @@ function clearForm() {
   elements.activityNotes.value = "";
 }
 
+function clearManualForm() {
+  elements.manualActivityName.value = "";
+  elements.manualActivityCategory.value = state.categories[0]?.id || "";
+  elements.manualActivityNotes.value = "";
+  setDefaultManualTimes();
+}
+
+function clearManualEditingState() {
+  state.editingActivityId = null;
+  elements.saveManualActivityButton.textContent = "Save Activity";
+  elements.cancelManualEditButton.hidden = true;
+  elements.manualActivityHelperText.textContent = "Add a completed activity manually if you forgot to log it in real time.";
+}
+
+function handleCancelManualEdit() {
+  clearManualEditingState();
+  clearManualForm();
+}
+
 function clearPresetEditingState() {
   state.editingPresetId = null;
   elements.savePresetButton.textContent = "Save to Frequently Used";
   elements.cancelPresetEditButton.hidden = true;
   elements.presetHelperText.textContent = "Save common activities here for one-tap tracking.";
+}
+
+function setManualEditingState(activityId, missingCategory = "") {
+  state.editingActivityId = activityId;
+  elements.saveManualActivityButton.textContent = "Update Activity";
+  elements.cancelManualEditButton.hidden = false;
+  elements.manualActivityHelperText.textContent = missingCategory
+    ? `Editing a saved activity. Its previous category "${missingCategory}" is no longer in the category list, so choose a new one before saving.`
+    : "Editing a saved activity. Update the time, category, or notes, then save your changes.";
 }
 
 function clearGroupEditingState() {
@@ -1060,13 +1437,20 @@ function handlePresetListClick(event) {
 }
 
 function handleHistoryListClick(event) {
-  const deleteButton = event.target.closest("[data-action='delete']");
+  const actionButton = event.target.closest("[data-action]");
 
-  if (!deleteButton) {
+  if (!actionButton) {
     return;
   }
 
-  deleteActivity(deleteButton.dataset.id);
+  if (actionButton.dataset.action === "edit") {
+    loadActivityIntoManualForm(actionButton.dataset.id);
+    return;
+  }
+
+  if (actionButton.dataset.action === "delete") {
+    deleteActivity(actionButton.dataset.id);
+  }
 }
 
 function handleDeletedListClick(event) {
@@ -1097,6 +1481,11 @@ function deleteActivity(activityId) {
 
   if (!shouldDelete) {
     return;
+  }
+
+  if (state.editingActivityId === activityId) {
+    clearManualEditingState();
+    clearManualForm();
   }
 
   state.activities.splice(activityIndex, 1);
@@ -1158,6 +1547,25 @@ function loadGroupIntoEditor(groupId) {
   setGroupEditingState(groupId);
   switchTab("categories");
   elements.groupNameInput.focus();
+}
+
+function loadActivityIntoManualForm(activityId) {
+  const activity = state.activities.find((item) => item.id === activityId);
+
+  if (!activity) {
+    return;
+  }
+
+  const matchedCategory = activity.categoryId ? findCategoryById(activity.categoryId) : null;
+
+  elements.manualActivityName.value = activity.name;
+  elements.manualActivityNotes.value = activity.notes || "";
+  elements.manualActivityCategory.value = matchedCategory ? matchedCategory.id : state.categories[0]?.id || "";
+  elements.manualStartTime.value = toDateTimeInputValue(new Date(activity.startTime));
+  elements.manualEndTime.value = toDateTimeInputValue(new Date(activity.endTime));
+  setManualEditingState(activityId, matchedCategory ? "" : activity.categoryName);
+  switchTrackerTab("manual");
+  elements.manualActivityName.focus();
 }
 
 function loadCategoryIntoEditor(categoryId) {
@@ -1291,7 +1699,52 @@ function updateItemCategoryReference(items, category) {
   });
 }
 
+function addCompletedActivity(activityData) {
+  const durationMs = activityData.durationMsOverride ?? (new Date(activityData.endTime).getTime() - new Date(activityData.startTime).getTime());
+
+  state.activities.unshift({
+    id: activityData.id || createId(),
+    name: activityData.name,
+    notes: activityData.notes || "",
+    categoryId: activityData.categoryId,
+    categoryName: activityData.categoryName,
+    groupId: activityData.groupId,
+    groupName: activityData.groupName,
+    startTime: activityData.startTime,
+    endTime: activityData.endTime,
+    durationMs
+  });
+
+  saveActivities();
+}
+
+function updateCompletedActivity(activityId, activityData) {
+  const activityIndex = state.activities.findIndex((activity) => activity.id === activityId);
+
+  if (activityIndex === -1) {
+    return false;
+  }
+
+  state.activities[activityIndex] = {
+    ...state.activities[activityIndex],
+    name: activityData.name,
+    notes: activityData.notes || "",
+    categoryId: activityData.categoryId,
+    categoryName: activityData.categoryName,
+    groupId: activityData.groupId,
+    groupName: activityData.groupName,
+    startTime: activityData.startTime,
+    endTime: activityData.endTime,
+    durationMs: new Date(activityData.endTime).getTime() - new Date(activityData.startTime).getTime()
+  };
+
+  saveActivities();
+  return true;
+}
+
 function startActivity(activityData) {
+  const startTime = new Date().toISOString();
+
   state.currentActivity = {
     id: createId(),
     name: activityData.name,
@@ -1300,7 +1753,11 @@ function startActivity(activityData) {
     categoryName: activityData.categoryName,
     groupId: activityData.groupId,
     groupName: activityData.groupName,
-    startTime: new Date().toISOString()
+    startTime,
+    status: "running",
+    elapsedMsBeforePause: 0,
+    lastResumedAt: startTime,
+    pausedAt: null
   };
 
   saveCurrentActivity();
@@ -1322,6 +1779,20 @@ function startPreset(presetId) {
   startActivity(preset);
 }
 
+function getCurrentActivityElapsedMs(activity, nowIsoString = new Date().toISOString()) {
+  if (!activity) {
+    return 0;
+  }
+
+  if (activity.status === "paused") {
+    return activity.elapsedMsBeforePause || 0;
+  }
+
+  const resumeTime = activity.lastResumedAt || activity.startTime;
+  const currentSegmentMs = new Date(nowIsoString).getTime() - new Date(resumeTime).getTime();
+  return Math.max(0, (activity.elapsedMsBeforePause || 0) + currentSegmentMs);
+}
+
 function loadPresetIntoForm(presetId) {
   const preset = state.presets.find((item) => item.id === presetId);
 
@@ -1334,7 +1805,12 @@ function loadPresetIntoForm(presetId) {
   elements.activityName.value = preset.name;
   elements.activityNotes.value = preset.notes || "";
   elements.activityCategory.value = matchedCategory ? matchedCategory.id : state.categories[0]?.id || "";
+  clearManualEditingState();
+  elements.manualActivityName.value = preset.name;
+  elements.manualActivityNotes.value = preset.notes || "";
+  elements.manualActivityCategory.value = matchedCategory ? matchedCategory.id : state.categories[0]?.id || "";
   setPresetEditingState(presetId, matchedCategory ? "" : preset.categoryName);
+  switchTrackerTab("live");
   switchTab("presets");
   elements.activityName.focus();
 }
@@ -1462,8 +1938,22 @@ function formatDuration(milliseconds) {
   }
 
   const totalMinutes = Math.round(milliseconds / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+  const days = Math.floor(totalMinutes / 1440);
+  const remainingMinutes = totalMinutes % 1440;
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+
+  if (days > 0) {
+    if (hours === 0 && minutes === 0) {
+      return `${days}d`;
+    }
+
+    if (minutes === 0) {
+      return `${days}d ${hours}h`;
+    }
+
+    return `${days}d ${hours}h ${minutes}m`;
+  }
 
   if (hours === 0) {
     return `${minutes}m`;
@@ -1483,6 +1973,12 @@ function formatDateTime(isoString) {
   });
 }
 
+function formatTimeOnly(isoString) {
+  return new Date(isoString).toLocaleTimeString([], {
+    timeStyle: "short"
+  });
+}
+
 function formatPercent(part, total) {
   if (!total) {
     return "0%";
@@ -1496,6 +1992,15 @@ function toDateInputValue(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function toDateTimeInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
 }
 
 function escapeHtml(value) {

@@ -5,6 +5,9 @@ A browser-based, mobile-friendly prototype for tracking work and personal activi
 ## Features
 
 - Start and stop activities in real time
+- Pause and resume a live activity without ending it
+- Add a completed activity manually when you forgot to log it live
+- Edit a saved activity later if it ended early or kept running too long
 - Enter an activity name, choose a category, and optionally add notes or tags
 - Create, edit, and remove custom groups and custom categories
 - Organize the app as `Group -> Category -> Activity -> Notes/Tags`
@@ -14,7 +17,7 @@ A browser-based, mobile-friendly prototype for tracking work and personal activi
 - Use tabs to switch between Frequently Used, Label Manager, Recently Deleted, and Analytics
 - Store activity data locally in the browser with `localStorage`
 - Filter reports by date range
-- See total tracked time, top groups, top categories, and simple visual summaries
+- See total tracked time, top groups, top categories, daily details, and simple visual summaries
 - Export saved logs as `CSV` or `JSON`
 - Use the app comfortably on desktop or phone-sized screens
 
@@ -52,12 +55,15 @@ Then open the local address shown by the server in your browser.
 4. Choose one of your saved categories.
 5. Optionally add notes or tags.
 6. Click `Start Activity`.
-7. When finished, click `Stop Current`.
-8. Save recurring activities to the `Frequently Used` tab for future one-tap tracking.
-9. Review saved entries in the history panel.
-10. If you delete something by mistake, restore it from the `Recently Deleted` tab or permanently delete it there.
-11. Use the `Analytics` tab to filter by date range and by group.
-12. Export your data as `CSV` or `JSON` if needed.
+7. Use `Pause` and `Resume` if you need to temporarily stop tracking without ending the activity.
+8. When finished, click `Stop Current`.
+9. If you forgot to log something, open the `Add Activity` tab in the tracking panel and save it with a start and end time.
+10. If a saved entry needs a correction, click `Edit` in the history list and update it from the same `Add Activity` form.
+11. Save recurring activities to the `Frequently Used` tab for future one-tap tracking.
+12. Review saved entries in the history panel.
+13. If you delete something by mistake, restore it from the `Recently Deleted` tab or permanently delete it there.
+14. Use the `Analytics` tab for a ranged overview or switch to `Daily Detail` for a chosen-day timeline and breakdown.
+15. Export your data as `CSV` or `JSON` if needed.
 
 ## Data Storage
 
@@ -86,7 +92,7 @@ Each completed activity stores:
 
 This MVP is intentionally lightweight. Useful next steps could include:
 
-- Manual activity entry for past times
+- Editing a currently running activity's start time before stopping it
 - More detailed charts
 - Daily or weekly summaries
 - Search and tag filtering
