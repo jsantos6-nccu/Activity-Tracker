@@ -216,6 +216,65 @@
             </section>
           </div>
 
+          <section class="analytics-card stack-layout">
+            <div>
+              <p class="section-kicker">Custom Code</p>
+              <h3>Short-code connection setup</h3>
+            </div>
+            <p class="history-summary">This easier flow needs a small signaling service. The direct code flow below still works without one.</p>
+
+            <div class="field-grid field-grid--equal">
+              <label class="field">
+                <span>Signaling server URL</span>
+                <input id="signalingServerUrl" type="url" placeholder="https://your-signal-server.example.com">
+              </label>
+
+              <label class="field">
+                <span>Preferred custom code (optional)</span>
+                <input id="preferredShortCode" type="text" placeholder="HOME-LAPTOP" maxlength="32">
+              </label>
+            </div>
+
+            <div class="button-row">
+              <button id="saveSignalingSettingsButton" class="secondary-button secondary-button--strong" type="button">Save Signaling Settings</button>
+            </div>
+
+            <div class="analytics-grid">
+              <section class="analytics-card stack-layout">
+                <div>
+                  <p class="section-kicker">Host</p>
+                  <h3>Create short code</h3>
+                </div>
+                <p class="history-summary">Use this on the first device to request a short connection code from your signaling service.</p>
+                <div class="button-row">
+                  <button id="createShortCodeButton" class="secondary-button secondary-button--strong" type="button">Create Short Code</button>
+                  <button id="copyShortCodeButton" class="secondary-button" type="button">Copy Short Code</button>
+                </div>
+                <label class="field">
+                  <span>Active short code</span>
+                  <input id="activeShortCodeOutput" type="text" readonly placeholder="Short code will appear here">
+                </label>
+              </section>
+
+              <section class="analytics-card stack-layout">
+                <div>
+                  <p class="section-kicker">Join</p>
+                  <h3>Join with short code</h3>
+                </div>
+                <p class="history-summary">Use this on the second device to join without copying a full connection blob.</p>
+                <label class="field">
+                  <span>Short code</span>
+                  <input id="joinShortCodeInput" type="text" placeholder="Enter the custom code">
+                </label>
+                <div class="button-row">
+                  <button id="joinShortCodeButton" class="secondary-button secondary-button--strong" type="button">Join with Short Code</button>
+                </div>
+              </section>
+            </div>
+
+            <div id="signalingStatus" class="empty-state">Short codes require a signaling server. Save a signaling server URL to enable this easier connection flow.</div>
+          </section>
+
           <div class="analytics-grid">
             <section class="analytics-card stack-layout">
               <div>

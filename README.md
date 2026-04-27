@@ -18,6 +18,7 @@ A browser-based, mobile-friendly prototype for tracking work and personal activi
 - Store activity data locally in the browser with `localStorage`
 - Use a sync-ready local data model with stable record IDs and device metadata for future private multi-device support
 - Exchange live device codes to sync changes directly while both devices are open
+- Support a cleaner short-code connection flow when paired with a lightweight signaling service
 - Download and import encrypted full-app backups for private transfer between your own devices
 - Support installable web-app launching from a hosted URL on phone or desktop
 - Filter reports by date range
@@ -30,6 +31,10 @@ A browser-based, mobile-friendly prototype for tracking work and personal activi
 - `index.html` - Main app layout
 - `styles.css` - Responsive styling and UI design
 - `app.js` - Activity tracking, storage, rendering, analytics, and export logic
+- `manifest.webmanifest` - Installable web-app metadata
+- `sw.js` - Offline/service worker support for hosted use
+- `app-icon.svg` - App icon for installable web launches
+- `SIGNALING_SERVER.md` - Short-code signaling server contract
 - `README.md` - Project overview and run instructions
 
 ## How to Run Locally
@@ -76,7 +81,7 @@ Then open that URL on the phone. From there, the `Devices` tab can be used for l
 11. Save recurring activities to the `Frequently Used` tab for future one-tap tracking.
 12. Review saved entries in the history panel.
 13. If you delete something by mistake, restore it from the `Recently Deleted` tab or permanently delete it there.
-14. Use the `Devices` tab to generate a live connection code, paste the reply code from a second device, and keep both devices synced while both apps stay open.
+14. Use the `Devices` tab to generate a live connection code, or configure a signaling server for a shorter custom-code flow, and keep both devices synced while both apps stay open.
 15. Use the `Analytics` tab for a ranged overview or switch to `Daily Detail` for a chosen-day timeline and breakdown.
 16. Export your data as `CSV` or `JSON` if needed.
 17. Use the `Private Backup` tab to download an encrypted full-app backup and merge it on another device with the same passphrase.
@@ -94,6 +99,7 @@ Then open that URL on the phone. From there, the `Devices` tab can be used for l
 - Refreshing the page will preserve the running timer state and saved history in the same browser
 - Data stays on the local machine unless the user exports it manually
 - Live device linking is peer-to-peer and currently works while both devices are open during the same session
+- Short custom codes require a signaling server because static hosting alone cannot hold temporary pairing sessions
 
 ## Activity Data Model
 

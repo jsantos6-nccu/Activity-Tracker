@@ -6,7 +6,8 @@ const STORAGE_KEYS = {
   presets: "localActivityTracker.presets",
   groups: "localActivityTracker.groups",
   categories: "localActivityTracker.categories",
-  deviceId: "localActivityTracker.deviceId"
+  deviceId: "localActivityTracker.deviceId",
+  signalingSettings: "localActivityTracker.signalingSettings"
 };
 
 const DATA_SCHEMA_VERSION = 2;
@@ -45,7 +46,9 @@ const runtime = {
   dataChannel: null,
   peerRole: "",
   deferredInstallPrompt: null,
-  isApplyingRemoteSync: false
+  isApplyingRemoteSync: false,
+  signalingPollTimer: null,
+  activeShortCode: ""
 };
 
 const elements = {
@@ -92,6 +95,15 @@ const elements = {
   installStatus: document.getElementById("installStatus"),
   deviceSyncStatus: document.getElementById("deviceSyncStatus"),
   disconnectDevicesButton: document.getElementById("disconnectDevicesButton"),
+  signalingServerUrl: document.getElementById("signalingServerUrl"),
+  preferredShortCode: document.getElementById("preferredShortCode"),
+  saveSignalingSettingsButton: document.getElementById("saveSignalingSettingsButton"),
+  createShortCodeButton: document.getElementById("createShortCodeButton"),
+  copyShortCodeButton: document.getElementById("copyShortCodeButton"),
+  activeShortCodeOutput: document.getElementById("activeShortCodeOutput"),
+  joinShortCodeInput: document.getElementById("joinShortCodeInput"),
+  joinShortCodeButton: document.getElementById("joinShortCodeButton"),
+  signalingStatus: document.getElementById("signalingStatus"),
   createOfferButton: document.getElementById("createOfferButton"),
   copyOfferButton: document.getElementById("copyOfferButton"),
   hostOfferCode: document.getElementById("hostOfferCode"),
@@ -138,6 +150,7 @@ document.addEventListener("DOMContentLoaded", init);
 
 function init() {
   loadState();
+  loadSignalingSettings();
   setDefaultFilters();
   setDefaultDailyFilter();
   setDefaultManualTimes();
@@ -145,6 +158,7 @@ function init() {
   registerServiceWorker();
   renderInstallState();
   renderDeviceSyncStatus();
+  renderSignalingState();
   renderAll();
 
   // Refresh the live timer every second while an activity is running.
@@ -176,6 +190,10 @@ function bindEvents() {
   elements.exportJsonButton.addEventListener("click", () => exportActivities("json"));
   elements.installAppButton.addEventListener("click", handleInstallApp);
   elements.disconnectDevicesButton.addEventListener("click", disconnectLiveSync);
+  elements.saveSignalingSettingsButton.addEventListener("click", handleSaveSignalingSettings);
+  elements.createShortCodeButton.addEventListener("click", handleCreateShortCode);
+  elements.copyShortCodeButton.addEventListener("click", () => copyTextToClipboard(elements.activeShortCodeOutput.value, "Short code copied."));
+  elements.joinShortCodeButton.addEventListener("click", handleJoinShortCode);
   elements.createOfferButton.addEventListener("click", handleCreateOfferCode);
   elements.copyOfferButton.addEventListener("click", () => copyTextToClipboard(elements.hostOfferCode.value, "Connection code copied."));
   elements.acceptAnswerButton.addEventListener("click", handleAcceptAnswerCode);
@@ -526,6 +544,39 @@ function setDefaultFilters() {
 
   elements.startDateFilter.value = toDateInputValue(sevenDaysAgo);
   elements.endDateFilter.value = toDateInputValue(today);
+}
+
+function loadSignalingSettings() {
+  const savedSettings = readJsonStorage(STORAGE_KEYS.signalingSettings, {});
+  elements.signalingServerUrl.value = savedSettings.serverUrl || "";
+}
+
+function saveSignalingSettings() {
+  localStorage.setItem(STORAGE_KEYS.signalingSettings, JSON.stringify({
+    serverUrl: getNormalizedSignalingServerUrl()
+  }));
+}
+
+function handleSaveSignalingSettings() {
+  saveSignalingSettings();
+  renderSignalingState("Signaling settings saved.", "success");
+}
+
+function getNormalizedSignalingServerUrl() {
+  return elements.signalingServerUrl.value.trim().replace(/\/+$/, "");
+}
+
+function renderSignalingState(message = "", tone = "neutral") {
+  const serverUrl = getNormalizedSignalingServerUrl();
+  const fallbackMessage = serverUrl
+    ? `Signaling server saved: ${serverUrl}`
+    : "Short codes require a signaling server. Save a signaling server URL to enable this easier connection flow.";
+  const resolvedMessage = message || fallbackMessage;
+  const resolvedTone = message ? tone : (serverUrl ? "success" : "neutral");
+
+  elements.signalingStatus.textContent = resolvedMessage;
+  elements.signalingStatus.className = `empty-state signaling-status signaling-status--${resolvedTone}`;
+  elements.activeShortCodeOutput.value = runtime.activeShortCode || "";
 }
 
 async function registerServiceWorker() {
@@ -2171,6 +2222,164 @@ async function handleCreateOfferCode() {
   }
 }
 
+async function handleCreateShortCode() {
+  const serverUrl = getNormalizedSignalingServerUrl();
+
+  if (!serverUrl) {
+    renderSignalingState("Save a signaling server URL before creating a short code.", "error");
+    return;
+  }
+
+  if (!window.RTCPeerConnection) {
+    renderSignalingState("This browser does not support live peer-to-peer device linking.", "error");
+    return;
+  }
+
+  try {
+    disconnectLiveSync({ silent: true });
+    const peerConnection = createPeerConnection("host");
+    const dataChannel = peerConnection.createDataChannel("activity-sync");
+    attachDataChannel(dataChannel);
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    await waitForIceGatheringComplete(peerConnection);
+
+    const response = await signalingRequest("/sessions", {
+      method: "POST",
+      body: {
+        offer: encodeSignalPayload(peerConnection.localDescription),
+        requestedCode: sanitizeShortCode(elements.preferredShortCode.value)
+      }
+    });
+
+    runtime.activeShortCode = response.code || "";
+    elements.activeShortCodeOutput.value = runtime.activeShortCode;
+    startShortCodePolling(runtime.activeShortCode);
+    renderSignalingState(`Short code ${runtime.activeShortCode || "created"} is ready. Share it with the second device.`, "success");
+  } catch (error) {
+    console.error("Unable to create short code:", error);
+    renderSignalingState("The short code could not be created. Check the signaling server and try again.", "error");
+  }
+}
+
+async function handleJoinShortCode() {
+  const serverUrl = getNormalizedSignalingServerUrl();
+  const shortCode = sanitizeShortCode(elements.joinShortCodeInput.value);
+
+  if (!serverUrl) {
+    renderSignalingState("Save a signaling server URL before joining with a short code.", "error");
+    return;
+  }
+
+  if (!shortCode) {
+    renderSignalingState("Enter a short code before joining.", "error");
+    return;
+  }
+
+  if (!window.RTCPeerConnection) {
+    renderSignalingState("This browser does not support live peer-to-peer device linking.", "error");
+    return;
+  }
+
+  try {
+    disconnectLiveSync({ silent: true });
+    const session = await signalingRequest(`/sessions/${encodeURIComponent(shortCode)}`, {
+      method: "GET"
+    });
+    const remoteOffer = decodeSignalPayload(session.offer);
+    const peerConnection = createPeerConnection("join");
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    await waitForIceGatheringComplete(peerConnection);
+
+    await signalingRequest(`/sessions/${encodeURIComponent(shortCode)}/answer`, {
+      method: "POST",
+      body: {
+        answer: encodeSignalPayload(peerConnection.localDescription)
+      }
+    });
+
+    runtime.activeShortCode = shortCode;
+    elements.activeShortCodeOutput.value = runtime.activeShortCode;
+    renderSignalingState(`Joined short code ${shortCode}. Waiting for the live link to finish connecting.`, "success");
+  } catch (error) {
+    console.error("Unable to join short code:", error);
+    renderSignalingState("The short code could not be joined. Check that it is still active and try again.", "error");
+  }
+}
+
+function startShortCodePolling(shortCode) {
+  stopShortCodePolling();
+
+  if (!shortCode) {
+    return;
+  }
+
+  runtime.signalingPollTimer = window.setInterval(async () => {
+    if (!runtime.peerConnection || runtime.peerConnection.remoteDescription) {
+      stopShortCodePolling();
+      return;
+    }
+
+    try {
+      const session = await signalingRequest(`/sessions/${encodeURIComponent(shortCode)}`, {
+        method: "GET"
+      });
+
+      if (!session.answer) {
+        return;
+      }
+
+      const remoteAnswer = decodeSignalPayload(session.answer);
+      await runtime.peerConnection.setRemoteDescription(new RTCSessionDescription(remoteAnswer));
+      stopShortCodePolling();
+      renderSignalingState(`Short code ${shortCode} completed. Waiting for live sync to become active.`, "success");
+    } catch (error) {
+      console.error("Unable to poll short code session:", error);
+    }
+  }, 2500);
+}
+
+function stopShortCodePolling() {
+  if (runtime.signalingPollTimer) {
+    window.clearInterval(runtime.signalingPollTimer);
+    runtime.signalingPollTimer = null;
+  }
+}
+
+async function signalingRequest(path, options = {}) {
+  const serverUrl = getNormalizedSignalingServerUrl();
+
+  if (!serverUrl) {
+    throw new Error("No signaling server URL is configured.");
+  }
+
+  const response = await fetch(`${serverUrl}${path}`, {
+    method: options.method || "GET",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+
+  if (!response.ok) {
+    throw new Error(`Signaling request failed with status ${response.status}`);
+  }
+
+  return response.json();
+}
+
+function sanitizeShortCode(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, "")
+    .slice(0, 32);
+}
+
 async function handleCreateAnswerCode() {
   if (!window.RTCPeerConnection) {
     renderDeviceSyncStatus("This browser does not support live peer-to-peer device linking.", "error");
@@ -2314,6 +2523,8 @@ function decodeSignalPayload(encodedValue) {
 }
 
 function disconnectLiveSync(options = {}) {
+  stopShortCodePolling();
+
   if (runtime.dataChannel) {
     runtime.dataChannel.close();
     runtime.dataChannel = null;
@@ -2325,15 +2536,19 @@ function disconnectLiveSync(options = {}) {
   }
 
   runtime.peerRole = "";
+  runtime.activeShortCode = "";
   elements.hostOfferCode.value = "";
   elements.hostAnswerCodeInput.value = "";
   elements.joinOfferCodeInput.value = "";
   elements.joinAnswerCodeOutput.value = "";
+  elements.activeShortCodeOutput.value = "";
 
   if (!options.silent) {
     renderDeviceSyncStatus("Live link disconnected. You can generate a new device code whenever you want to reconnect.", "neutral");
+    renderSignalingState("Short-code session cleared. You can create a new short code whenever you want to reconnect.", "neutral");
   } else {
     renderDeviceSyncStatus();
+    renderSignalingState();
   }
 }
 

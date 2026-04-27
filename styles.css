@@ -584,11 +584,13 @@ textarea {
 
 .install-status,
 .device-sync-status,
-.backup-status {
+.backup-status,
+.signaling-status {
   margin-top: 0.25rem;
 }
 
-.backup-status--success {
+.backup-status--success,
+.signaling-status--success {
   color: #184f36;
   background: rgba(210, 239, 224, 0.96);
   border-color: rgba(31, 111, 95, 0.28);
@@ -596,14 +598,16 @@ textarea {
 
 .backup-status--error,
 .install-status--error,
-.device-sync-status--error {
+.device-sync-status--error,
+.signaling-status--error {
   color: #6d2d28;
   background: rgba(245, 223, 220, 0.97);
   border-color: rgba(151, 71, 61, 0.28);
 }
 
 .install-status--success,
-.device-sync-status--success {
+.device-sync-status--success,
+.signaling-status--success {
   color: #184f36;
   background: rgba(210, 239, 224, 0.96);
   border-color: rgba(31, 111, 95, 0.28);
