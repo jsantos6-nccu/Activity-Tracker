@@ -106,12 +106,14 @@ const elements = {
   signalingStatus: document.getElementById("signalingStatus"),
   createOfferButton: document.getElementById("createOfferButton"),
   copyOfferButton: document.getElementById("copyOfferButton"),
+  copyOfferLinkButton: document.getElementById("copyOfferLinkButton"),
   hostOfferCode: document.getElementById("hostOfferCode"),
   hostAnswerCodeInput: document.getElementById("hostAnswerCodeInput"),
   acceptAnswerButton: document.getElementById("acceptAnswerButton"),
   joinOfferCodeInput: document.getElementById("joinOfferCodeInput"),
   createAnswerButton: document.getElementById("createAnswerButton"),
   copyAnswerButton: document.getElementById("copyAnswerButton"),
+  copyAnswerLinkButton: document.getElementById("copyAnswerLinkButton"),
   joinAnswerCodeOutput: document.getElementById("joinAnswerCodeOutput"),
   backupPassphrase: document.getElementById("backupPassphrase"),
   backupPassphraseConfirm: document.getElementById("backupPassphraseConfirm"),
@@ -160,6 +162,7 @@ function init() {
   renderDeviceSyncStatus();
   renderSignalingState();
   renderAll();
+  applyPairingLinkFromUrl();
 
   // Refresh the live timer every second while an activity is running.
   state.timerId = window.setInterval(() => {
@@ -196,9 +199,11 @@ function bindEvents() {
   elements.joinShortCodeButton.addEventListener("click", handleJoinShortCode);
   elements.createOfferButton.addEventListener("click", handleCreateOfferCode);
   elements.copyOfferButton.addEventListener("click", () => copyTextToClipboard(elements.hostOfferCode.value, "Connection code copied."));
+  elements.copyOfferLinkButton.addEventListener("click", handleCopyOfferLink);
   elements.acceptAnswerButton.addEventListener("click", handleAcceptAnswerCode);
   elements.createAnswerButton.addEventListener("click", handleCreateAnswerCode);
   elements.copyAnswerButton.addEventListener("click", () => copyTextToClipboard(elements.joinAnswerCodeOutput.value, "Reply code copied."));
+  elements.copyAnswerLinkButton.addEventListener("click", handleCopyAnswerLink);
   elements.exportBackupButton.addEventListener("click", handleExportEncryptedBackup);
   elements.importBackupButton.addEventListener("click", handleImportEncryptedBackup);
   elements.startDateFilter.addEventListener("change", renderAnalytics);
@@ -222,6 +227,7 @@ function bindEvents() {
   window.addEventListener("resize", handleWindowResize);
   window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
   window.addEventListener("appinstalled", handleAppInstalled);
+  window.addEventListener("hashchange", applyPairingLinkFromUrl);
 }
 
 function loadState() {
@@ -2434,6 +2440,24 @@ async function handleAcceptAnswerCode() {
   }
 }
 
+async function handleCopyOfferLink() {
+  if (!elements.hostOfferCode.value.trim()) {
+    renderDeviceSyncStatus("Create a connection code before copying a join link.", "error");
+    return;
+  }
+
+  await copyTextToClipboard(buildPairingLink("offer", elements.hostOfferCode.value), "Join link copied.");
+}
+
+async function handleCopyAnswerLink() {
+  if (!elements.joinAnswerCodeOutput.value.trim()) {
+    renderDeviceSyncStatus("Generate a reply code before copying a reply link.", "error");
+    return;
+  }
+
+  await copyTextToClipboard(buildPairingLink("answer", elements.joinAnswerCodeOutput.value), "Reply link copied.");
+}
+
 function createPeerConnection(role) {
   const peerConnection = new RTCPeerConnection({
     iceServers: [
@@ -2520,6 +2544,42 @@ function encodeSignalPayload(description) {
 
 function decodeSignalPayload(encodedValue) {
   return JSON.parse(window.atob(encodedValue.trim()));
+}
+
+function buildPairingLink(type, payload) {
+  const url = new URL(window.location.href);
+  const hashParams = new URLSearchParams();
+  hashParams.set(type === "offer" ? "pair-offer" : "pair-answer", payload);
+  url.hash = hashParams.toString();
+  return url.toString();
+}
+
+function applyPairingLinkFromUrl() {
+  const hashValue = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+
+  if (!hashValue) {
+    return;
+  }
+
+  const hashParams = new URLSearchParams(hashValue);
+  const offerPayload = hashParams.get("pair-offer");
+  const answerPayload = hashParams.get("pair-answer");
+
+  if (!offerPayload && !answerPayload) {
+    return;
+  }
+
+  switchTab("devices");
+
+  if (offerPayload) {
+    elements.joinOfferCodeInput.value = offerPayload;
+    renderDeviceSyncStatus("Join link opened. The connection code has been filled in for this device.", "success");
+  }
+
+  if (answerPayload) {
+    elements.hostAnswerCodeInput.value = answerPayload;
+    renderDeviceSyncStatus("Reply link opened. The reply code has been filled in for this device.", "success");
+  }
 }
 
 function disconnectLiveSync(options = {}) {

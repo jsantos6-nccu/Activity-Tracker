@@ -189,7 +189,7 @@
         </section>
 
         <section id="tabPanelDevices" class="tab-panel stack-layout" role="tabpanel" aria-labelledby="tabButtonDevices" data-tab-panel="devices" hidden>
-          <p class="history-summary">Open the app from a shared URL on your phone or computer, then use a live device code exchange to sync changes directly while both devices are open.</p>
+          <p class="history-summary">Open the app from a shared URL on your phone or computer, then use a live device code or pairing link to sync changes directly while both devices are open.</p>
 
           <div class="analytics-grid">
             <section class="analytics-card stack-layout">
@@ -281,10 +281,11 @@
                 <p class="section-kicker">Device 1</p>
                 <h3>Create a connection code</h3>
               </div>
-              <p class="history-summary">Start here on the first device. Generate a code, then share it with the second device.</p>
+              <p class="history-summary">Start here on the first device. Generate a code, then either copy the raw code or send the join link to the second device.</p>
               <div class="button-row">
                 <button id="createOfferButton" class="secondary-button secondary-button--strong" type="button">Create Connection Code</button>
                 <button id="copyOfferButton" class="secondary-button" type="button">Copy Code</button>
+                <button id="copyOfferLinkButton" class="secondary-button" type="button">Copy Join Link</button>
               </div>
               <label class="field">
                 <span>Connection code</span>
@@ -304,7 +305,7 @@
                 <p class="section-kicker">Device 2</p>
                 <h3>Join with a connection code</h3>
               </div>
-              <p class="history-summary">Paste the code from the first device, then return the reply code it generates.</p>
+              <p class="history-summary">Paste the code from the first device, or open its join link, then return the reply code or reply link it generates.</p>
               <label class="field">
                 <span>Connection code from first device</span>
                 <textarea id="joinOfferCodeInput" class="field-textarea" rows="6" placeholder="Paste the first device's code here."></textarea>
@@ -312,6 +313,7 @@
               <div class="button-row">
                 <button id="createAnswerButton" class="secondary-button secondary-button--strong" type="button">Generate Reply Code</button>
                 <button id="copyAnswerButton" class="secondary-button" type="button">Copy Reply</button>
+                <button id="copyAnswerLinkButton" class="secondary-button" type="button">Copy Reply Link</button>
               </div>
               <label class="field">
                 <span>Reply code</span>
