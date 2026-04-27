@@ -1,11 +1,15 @@
 const STORAGE_KEYS = {
+  appData: "localActivityTracker.appData",
   activities: "localActivityTracker.activities",
   current: "localActivityTracker.currentActivity",
   deleted: "localActivityTracker.deletedActivities",
   presets: "localActivityTracker.presets",
   groups: "localActivityTracker.groups",
-  categories: "localActivityTracker.categories"
+  categories: "localActivityTracker.categories",
+  deviceId: "localActivityTracker.deviceId"
 };
+
+const DATA_SCHEMA_VERSION = 2;
 
 const GROUP_COLOR_PALETTE = [
   "#1f6f5f",
@@ -19,6 +23,7 @@ const GROUP_COLOR_PALETTE = [
 ];
 
 const state = {
+  deviceId: "",
   activities: [],
   deletedActivities: [],
   presets: [],
@@ -33,6 +38,14 @@ const state = {
   activeTab: "presets",
   activeTrackerTab: "live",
   activeAnalyticsSubtab: "overview"
+};
+
+const runtime = {
+  peerConnection: null,
+  dataChannel: null,
+  peerRole: "",
+  deferredInstallPrompt: null,
+  isApplyingRemoteSync: false
 };
 
 const elements = {
@@ -75,6 +88,26 @@ const elements = {
   deletedList: document.getElementById("deletedList"),
   exportCsvButton: document.getElementById("exportCsvButton"),
   exportJsonButton: document.getElementById("exportJsonButton"),
+  installAppButton: document.getElementById("installAppButton"),
+  installStatus: document.getElementById("installStatus"),
+  deviceSyncStatus: document.getElementById("deviceSyncStatus"),
+  disconnectDevicesButton: document.getElementById("disconnectDevicesButton"),
+  createOfferButton: document.getElementById("createOfferButton"),
+  copyOfferButton: document.getElementById("copyOfferButton"),
+  hostOfferCode: document.getElementById("hostOfferCode"),
+  hostAnswerCodeInput: document.getElementById("hostAnswerCodeInput"),
+  acceptAnswerButton: document.getElementById("acceptAnswerButton"),
+  joinOfferCodeInput: document.getElementById("joinOfferCodeInput"),
+  createAnswerButton: document.getElementById("createAnswerButton"),
+  copyAnswerButton: document.getElementById("copyAnswerButton"),
+  joinAnswerCodeOutput: document.getElementById("joinAnswerCodeOutput"),
+  backupPassphrase: document.getElementById("backupPassphrase"),
+  backupPassphraseConfirm: document.getElementById("backupPassphraseConfirm"),
+  exportBackupButton: document.getElementById("exportBackupButton"),
+  importBackupFile: document.getElementById("importBackupFile"),
+  importBackupPassphrase: document.getElementById("importBackupPassphrase"),
+  importBackupButton: document.getElementById("importBackupButton"),
+  backupStatus: document.getElementById("backupStatus"),
   startDateFilter: document.getElementById("startDateFilter"),
   endDateFilter: document.getElementById("endDateFilter"),
   scopeFilter: document.getElementById("scopeFilter"),
@@ -109,6 +142,9 @@ function init() {
   setDefaultDailyFilter();
   setDefaultManualTimes();
   bindEvents();
+  registerServiceWorker();
+  renderInstallState();
+  renderDeviceSyncStatus();
   renderAll();
 
   // Refresh the live timer every second while an activity is running.
@@ -138,6 +174,15 @@ function bindEvents() {
   elements.deletedList.addEventListener("click", handleDeletedListClick);
   elements.exportCsvButton.addEventListener("click", () => exportActivities("csv"));
   elements.exportJsonButton.addEventListener("click", () => exportActivities("json"));
+  elements.installAppButton.addEventListener("click", handleInstallApp);
+  elements.disconnectDevicesButton.addEventListener("click", disconnectLiveSync);
+  elements.createOfferButton.addEventListener("click", handleCreateOfferCode);
+  elements.copyOfferButton.addEventListener("click", () => copyTextToClipboard(elements.hostOfferCode.value, "Connection code copied."));
+  elements.acceptAnswerButton.addEventListener("click", handleAcceptAnswerCode);
+  elements.createAnswerButton.addEventListener("click", handleCreateAnswerCode);
+  elements.copyAnswerButton.addEventListener("click", () => copyTextToClipboard(elements.joinAnswerCodeOutput.value, "Reply code copied."));
+  elements.exportBackupButton.addEventListener("click", handleExportEncryptedBackup);
+  elements.importBackupButton.addEventListener("click", handleImportEncryptedBackup);
   elements.startDateFilter.addEventListener("change", renderAnalytics);
   elements.endDateFilter.addEventListener("change", renderAnalytics);
   elements.scopeFilter.addEventListener("change", renderAnalytics);
@@ -157,16 +202,21 @@ function bindEvents() {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
   });
   window.addEventListener("resize", handleWindowResize);
+  window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+  window.addEventListener("appinstalled", handleAppInstalled);
 }
 
 function loadState() {
+  state.deviceId = getOrCreateDeviceId();
+
   try {
-    const rawGroups = JSON.parse(localStorage.getItem(STORAGE_KEYS.groups)) || [];
-    const rawCategories = JSON.parse(localStorage.getItem(STORAGE_KEYS.categories)) || [];
-    const rawActivities = JSON.parse(localStorage.getItem(STORAGE_KEYS.activities)) || [];
-    const rawDeleted = JSON.parse(localStorage.getItem(STORAGE_KEYS.deleted)) || [];
-    const rawPresets = JSON.parse(localStorage.getItem(STORAGE_KEYS.presets)) || [];
-    const rawCurrent = JSON.parse(localStorage.getItem(STORAGE_KEYS.current)) || null;
+    const snapshot = loadPersistedSnapshot();
+    const rawGroups = snapshot.groups || [];
+    const rawCategories = snapshot.categories || [];
+    const rawActivities = snapshot.activities || [];
+    const rawDeleted = snapshot.deletedActivities || [];
+    const rawPresets = snapshot.presets || [];
+    const rawCurrent = snapshot.currentActivity || null;
 
     const legacyGroupNames = collectLegacyGroupNames(rawGroups, rawCategories, rawActivities, rawDeleted, rawPresets, rawCurrent);
 
@@ -186,12 +236,7 @@ function loadState() {
     state.currentActivity = null;
   }
 
-  saveGroups();
-  saveCategories();
-  saveActivities();
-  saveDeletedActivities();
-  savePresets();
-  saveCurrentActivity();
+  saveAllData();
 }
 
 function collectLegacyGroupNames(rawGroups, rawCategories, rawActivities, rawDeleted, rawPresets, rawCurrent) {
@@ -241,10 +286,10 @@ function normalizeStoredGroups(storedGroups, legacyGroupNames) {
     }
 
     seenNames.add(key);
-    normalized.push({
+    normalized.push(createLocalRecord({
       id: group.id || createId(),
       name
-    });
+    }, group));
   });
 
   legacyGroupNames.forEach((name) => {
@@ -256,10 +301,10 @@ function normalizeStoredGroups(storedGroups, legacyGroupNames) {
     }
 
     seenNames.add(key);
-    normalized.push({
+    normalized.push(createLocalRecord({
       id: createId(),
       name: trimmedName
-    });
+    }));
   });
 
   return normalized;
@@ -274,12 +319,12 @@ function normalizeStoredCategories(storedCategories) {
       const name = category.name.trim();
       const group = resolveGroupReference(category);
 
-      return {
+      return createLocalRecord({
         id: category.id || createId(),
         name,
         groupId: group ? group.id : "",
         groupName: group ? group.name : category.groupName || category.group || ""
-      };
+      }, category);
     })
     .filter((category) => {
       const key = category.name.toLowerCase();
@@ -307,13 +352,13 @@ function normalizeStoredCurrentActivity(activity) {
   }
 
   const normalized = normalizeCategoryReference(activity);
-  return {
+  return createLocalRecord({
     ...normalized,
     status: normalized.status === "paused" ? "paused" : "running",
     elapsedMsBeforePause: Number.isFinite(normalized.elapsedMsBeforePause) ? normalized.elapsedMsBeforePause : 0,
     lastResumedAt: normalized.lastResumedAt || normalized.startTime,
     pausedAt: normalized.pausedAt || null
-  };
+  }, activity);
 }
 
 function normalizeCategoryReference(item) {
@@ -326,14 +371,14 @@ function normalizeCategoryReference(item) {
     ? findGroupById(matchedCategory.groupId)
     : resolveGroupReference(item);
 
-  return {
+  return createLocalRecord({
     ...item,
     id: item.id || createId(),
     categoryId: matchedCategory ? matchedCategory.id : item.categoryId || "",
     categoryName: matchedCategory ? matchedCategory.name : item.categoryName || item.category || "Uncategorized",
     groupId: matchedGroup ? matchedGroup.id : item.groupId || "",
     groupName: matchedGroup ? matchedGroup.name : item.groupName || item.categoryGroup || item.group || "Ungrouped"
-  };
+  }, item);
 }
 
 function resolveGroupReference(item) {
@@ -352,32 +397,126 @@ function resolveGroupReference(item) {
   return findGroupByName(candidateName);
 }
 
+function loadPersistedSnapshot() {
+  const consolidated = readJsonStorage(STORAGE_KEYS.appData);
+
+  if (consolidated && typeof consolidated === "object") {
+    return {
+      groups: consolidated.groups || [],
+      categories: consolidated.categories || [],
+      activities: consolidated.activities || [],
+      deletedActivities: consolidated.deletedActivities || consolidated.deleted || [],
+      presets: consolidated.presets || [],
+      currentActivity: consolidated.currentActivity || consolidated.current || null
+    };
+  }
+
+  return {
+    groups: readJsonStorage(STORAGE_KEYS.groups, []),
+    categories: readJsonStorage(STORAGE_KEYS.categories, []),
+    activities: readJsonStorage(STORAGE_KEYS.activities, []),
+    deletedActivities: readJsonStorage(STORAGE_KEYS.deleted, []),
+    presets: readJsonStorage(STORAGE_KEYS.presets, []),
+    currentActivity: readJsonStorage(STORAGE_KEYS.current, null)
+  };
+}
+
+function readJsonStorage(key, fallback = null) {
+  const rawValue = localStorage.getItem(key);
+
+  if (!rawValue) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(rawValue);
+  } catch (error) {
+    console.error(`Unable to parse saved data for ${key}:`, error);
+    return fallback;
+  }
+}
+
 function saveActivities() {
-  localStorage.setItem(STORAGE_KEYS.activities, JSON.stringify(state.activities));
+  saveAllData();
 }
 
 function saveDeletedActivities() {
-  localStorage.setItem(STORAGE_KEYS.deleted, JSON.stringify(state.deletedActivities));
+  saveAllData();
 }
 
 function savePresets() {
-  localStorage.setItem(STORAGE_KEYS.presets, JSON.stringify(state.presets));
+  saveAllData();
 }
 
 function saveGroups() {
-  localStorage.setItem(STORAGE_KEYS.groups, JSON.stringify(state.groups));
+  saveAllData();
 }
 
 function saveCategories() {
-  localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(state.categories));
+  saveAllData();
 }
 
 function saveCurrentActivity() {
+  saveAllData();
+}
+
+function saveAllData() {
+  const snapshot = {
+    schemaVersion: DATA_SCHEMA_VERSION,
+    deviceId: state.deviceId,
+    savedAt: getCurrentTimestamp(),
+    groups: state.groups,
+    categories: state.categories,
+    activities: state.activities,
+    deletedActivities: state.deletedActivities,
+    presets: state.presets,
+    currentActivity: state.currentActivity
+  };
+
+  localStorage.setItem(STORAGE_KEYS.appData, JSON.stringify(snapshot));
+  localStorage.setItem(STORAGE_KEYS.groups, JSON.stringify(state.groups));
+  localStorage.setItem(STORAGE_KEYS.categories, JSON.stringify(state.categories));
+  localStorage.setItem(STORAGE_KEYS.activities, JSON.stringify(state.activities));
+  localStorage.setItem(STORAGE_KEYS.deleted, JSON.stringify(state.deletedActivities));
+  localStorage.setItem(STORAGE_KEYS.presets, JSON.stringify(state.presets));
+
   if (state.currentActivity) {
     localStorage.setItem(STORAGE_KEYS.current, JSON.stringify(state.currentActivity));
   } else {
     localStorage.removeItem(STORAGE_KEYS.current);
   }
+
+  if (!runtime.isApplyingRemoteSync) {
+    broadcastSnapshotToPeer("update");
+  }
+}
+
+function createLocalRecord(record, source = {}) {
+  const createdAt = record.createdAt || source.createdAt || getCurrentTimestamp();
+  const updatedAt = record.updatedAt || source.updatedAt || createdAt;
+  const deviceId = record.deviceId || source.deviceId || state.deviceId;
+
+  return {
+    ...record,
+    createdAt,
+    updatedAt,
+    deviceId,
+    lastModifiedBy: record.lastModifiedBy || source.lastModifiedBy || deviceId,
+    syncStatus: record.syncStatus || source.syncStatus || "local-only"
+  };
+}
+
+function applyLocalUpdateMetadata(record, changes = {}) {
+  const updatedRecord = createLocalRecord({
+    ...record,
+    ...changes,
+    updatedAt: getCurrentTimestamp(),
+    lastModifiedBy: state.deviceId,
+    syncStatus: "local-only"
+  }, record);
+
+  Object.assign(record, updatedRecord);
+  return record;
 }
 
 function setDefaultFilters() {
@@ -387,6 +526,70 @@ function setDefaultFilters() {
 
   elements.startDateFilter.value = toDateInputValue(sevenDaysAgo);
   elements.endDateFilter.value = toDateInputValue(today);
+}
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  try {
+    await navigator.serviceWorker.register("sw.js");
+  } catch (error) {
+    console.error("Unable to register service worker:", error);
+  }
+}
+
+function handleBeforeInstallPrompt(event) {
+  event.preventDefault();
+  runtime.deferredInstallPrompt = event;
+  renderInstallState();
+}
+
+async function handleInstallApp() {
+  if (!runtime.deferredInstallPrompt) {
+    setInstallStatus("Install is not available yet. Open the app from a supported URL in a compatible browser to install it.", "error");
+    return;
+  }
+
+  runtime.deferredInstallPrompt.prompt();
+  const choiceResult = await runtime.deferredInstallPrompt.userChoice;
+  runtime.deferredInstallPrompt = null;
+  renderInstallState();
+
+  if (choiceResult.outcome === "accepted") {
+    setInstallStatus("The app install was accepted. Once installed, you can launch it from your home screen or app list.", "success");
+  } else {
+    setInstallStatus("Install was dismissed. You can try again later from this tab or your browser menu.", "neutral");
+  }
+}
+
+function handleAppInstalled() {
+  runtime.deferredInstallPrompt = null;
+  renderInstallState();
+  setInstallStatus("The app is installed and can now be launched more like a native app.", "success");
+}
+
+function renderInstallState() {
+  elements.installAppButton.hidden = !runtime.deferredInstallPrompt;
+}
+
+function setInstallStatus(message, tone = "neutral") {
+  elements.installStatus.textContent = message;
+  elements.installStatus.className = `empty-state install-status install-status--${tone}`;
+}
+
+function renderDeviceSyncStatus(message = "", tone = "neutral") {
+  const isConnected = runtime.dataChannel?.readyState === "open";
+  const fallbackMessage = isConnected
+    ? "Devices are linked and live updates are active while both apps remain open."
+    : "No live device link is active yet.";
+  const resolvedMessage = message || fallbackMessage;
+  const resolvedTone = message ? tone : (isConnected ? "success" : "neutral");
+
+  elements.deviceSyncStatus.textContent = resolvedMessage;
+  elements.deviceSyncStatus.className = `empty-state device-sync-status device-sync-status--${resolvedTone}`;
+  elements.disconnectDevicesButton.disabled = !(runtime.peerConnection || runtime.dataChannel);
 }
 
 function setDefaultDailyFilter() {
@@ -468,6 +671,8 @@ function renderAll() {
   renderAnalyticsSubtabState();
   renderTrackerTabState();
   renderTabState();
+  renderInstallState();
+  renderDeviceSyncStatus();
   renderGroups();
   renderCategories();
   renderPresets();
@@ -1050,15 +1255,19 @@ function handleTogglePauseActivity() {
   }
 
   if (state.currentActivity.status === "paused") {
-    state.currentActivity.status = "running";
-    state.currentActivity.lastResumedAt = new Date().toISOString();
-    state.currentActivity.pausedAt = null;
+    applyLocalUpdateMetadata(state.currentActivity, {
+      status: "running",
+      lastResumedAt: new Date().toISOString(),
+      pausedAt: null
+    });
   } else {
     const now = new Date().toISOString();
-    state.currentActivity.elapsedMsBeforePause = getCurrentActivityElapsedMs(state.currentActivity, now);
-    state.currentActivity.status = "paused";
-    state.currentActivity.pausedAt = now;
-    state.currentActivity.lastResumedAt = null;
+    applyLocalUpdateMetadata(state.currentActivity, {
+      elapsedMsBeforePause: getCurrentActivityElapsedMs(state.currentActivity, now),
+      status: "paused",
+      pausedAt: now,
+      lastResumedAt: null
+    });
   }
 
   saveCurrentActivity();
@@ -1175,12 +1384,12 @@ function handleSavePreset() {
       return;
     }
 
-    Object.assign(preset, presetData);
+    applyLocalUpdateMetadata(preset, presetData);
   } else {
-    state.presets.unshift({
+    state.presets.unshift(createLocalRecord({
       id: createId(),
       ...presetData
-    });
+    }));
   }
 
   savePresets();
@@ -1216,13 +1425,13 @@ function handleSaveGroup() {
       return;
     }
 
-    group.name = name;
+    applyLocalUpdateMetadata(group, { name });
     synchronizeGroupReferences(group);
   } else {
-    state.groups.push({
+    state.groups.push(createLocalRecord({
       id: createId(),
       name
-    });
+    }));
   }
 
   saveGroups();
@@ -1270,17 +1479,19 @@ function handleSaveCategory() {
       return;
     }
 
-    category.name = name;
-    category.groupId = selectedGroup.id;
-    category.groupName = selectedGroup.name;
-    synchronizeCategoryReferences(category);
-  } else {
-    state.categories.push({
-      id: createId(),
+    applyLocalUpdateMetadata(category, {
       name,
       groupId: selectedGroup.id,
       groupName: selectedGroup.name
     });
+    synchronizeCategoryReferences(category);
+  } else {
+    state.categories.push(createLocalRecord({
+      id: createId(),
+      name,
+      groupId: selectedGroup.id,
+      groupName: selectedGroup.name
+    }));
   }
 
   saveCategories();
@@ -1489,10 +1700,16 @@ function deleteActivity(activityId) {
   }
 
   state.activities.splice(activityIndex, 1);
-  state.deletedActivities.unshift({
+  const deletedRecord = createLocalRecord({
     ...activity,
-    deletedAt: new Date().toISOString()
-  });
+    deletedAt: getCurrentTimestamp()
+  }, activity);
+
+  deletedRecord.updatedAt = deletedRecord.deletedAt;
+  deletedRecord.lastModifiedBy = state.deviceId;
+  deletedRecord.syncStatus = "local-only";
+
+  state.deletedActivities.unshift(deletedRecord);
 
   state.deletedActivities = state.deletedActivities.slice(0, 10);
   saveActivities();
@@ -1530,7 +1747,12 @@ function restoreDeletedActivity(activityId) {
   const { deletedAt, ...restoredActivity } = deletedActivity;
 
   state.deletedActivities.splice(deletedIndex, 1);
-  state.activities.unshift(restoredActivity);
+  state.activities.unshift(createLocalRecord({
+    ...restoredActivity,
+    updatedAt: getCurrentTimestamp(),
+    lastModifiedBy: state.deviceId,
+    syncStatus: "local-only"
+  }, restoredActivity));
   saveActivities();
   saveDeletedActivities();
   renderAll();
@@ -1644,7 +1866,7 @@ function deleteCategory(categoryId) {
 function synchronizeGroupReferences(group) {
   state.categories.forEach((category) => {
     if (category.groupId === group.id) {
-      category.groupName = group.name;
+      applyLocalUpdateMetadata(category, { groupName: group.name });
     }
   });
 
@@ -1653,7 +1875,7 @@ function synchronizeGroupReferences(group) {
   updateItemGroupReference(state.presets, group.id, group.name);
 
   if (state.currentActivity && state.currentActivity.groupId === group.id) {
-    state.currentActivity.groupName = group.name;
+    applyLocalUpdateMetadata(state.currentActivity, { groupName: group.name });
   }
 }
 
@@ -1663,28 +1885,30 @@ function synchronizeCategoryReferences(category) {
   updateItemCategoryReference(state.presets, category);
 
   if (state.currentActivity && state.currentActivity.categoryId === category.id) {
-    state.currentActivity.categoryName = category.name;
-    state.currentActivity.groupId = category.groupId;
-    state.currentActivity.groupName = category.groupName;
+    applyLocalUpdateMetadata(state.currentActivity, {
+      categoryName: category.name,
+      groupId: category.groupId,
+      groupName: category.groupName
+    });
   }
 }
 
 function clearCategoryReferencesFromActiveItems(categoryId) {
   state.presets.forEach((preset) => {
     if (preset.categoryId === categoryId) {
-      preset.categoryId = "";
+      applyLocalUpdateMetadata(preset, { categoryId: "" });
     }
   });
 
   if (state.currentActivity && state.currentActivity.categoryId === categoryId) {
-    state.currentActivity.categoryId = "";
+    applyLocalUpdateMetadata(state.currentActivity, { categoryId: "" });
   }
 }
 
 function updateItemGroupReference(items, groupId, groupName) {
   items.forEach((item) => {
     if (item.groupId === groupId) {
-      item.groupName = groupName;
+      applyLocalUpdateMetadata(item, { groupName });
     }
   });
 }
@@ -1692,9 +1916,11 @@ function updateItemGroupReference(items, groupId, groupName) {
 function updateItemCategoryReference(items, category) {
   items.forEach((item) => {
     if (item.categoryId === category.id) {
-      item.categoryName = category.name;
-      item.groupId = category.groupId;
-      item.groupName = category.groupName;
+      applyLocalUpdateMetadata(item, {
+        categoryName: category.name,
+        groupId: category.groupId,
+        groupName: category.groupName
+      });
     }
   });
 }
@@ -1702,7 +1928,7 @@ function updateItemCategoryReference(items, category) {
 function addCompletedActivity(activityData) {
   const durationMs = activityData.durationMsOverride ?? (new Date(activityData.endTime).getTime() - new Date(activityData.startTime).getTime());
 
-  state.activities.unshift({
+  state.activities.unshift(createLocalRecord({
     id: activityData.id || createId(),
     name: activityData.name,
     notes: activityData.notes || "",
@@ -1712,8 +1938,9 @@ function addCompletedActivity(activityData) {
     groupName: activityData.groupName,
     startTime: activityData.startTime,
     endTime: activityData.endTime,
-    durationMs
-  });
+    durationMs,
+    updatedAt: activityData.updatedAt || activityData.endTime
+  }, activityData));
 
   saveActivities();
 }
@@ -1725,7 +1952,7 @@ function updateCompletedActivity(activityId, activityData) {
     return false;
   }
 
-  state.activities[activityIndex] = {
+  state.activities[activityIndex] = createLocalRecord({
     ...state.activities[activityIndex],
     name: activityData.name,
     notes: activityData.notes || "",
@@ -1735,8 +1962,11 @@ function updateCompletedActivity(activityId, activityData) {
     groupName: activityData.groupName,
     startTime: activityData.startTime,
     endTime: activityData.endTime,
-    durationMs: new Date(activityData.endTime).getTime() - new Date(activityData.startTime).getTime()
-  };
+    durationMs: new Date(activityData.endTime).getTime() - new Date(activityData.startTime).getTime(),
+    updatedAt: getCurrentTimestamp(),
+    lastModifiedBy: state.deviceId,
+    syncStatus: "local-only"
+  }, state.activities[activityIndex]);
 
   saveActivities();
   return true;
@@ -1745,7 +1975,7 @@ function updateCompletedActivity(activityId, activityData) {
 function startActivity(activityData) {
   const startTime = new Date().toISOString();
 
-  state.currentActivity = {
+  state.currentActivity = createLocalRecord({
     id: createId(),
     name: activityData.name,
     notes: activityData.notes,
@@ -1758,7 +1988,7 @@ function startActivity(activityData) {
     elapsedMsBeforePause: 0,
     lastResumedAt: startTime,
     pausedAt: null
-  };
+  });
 
   saveCurrentActivity();
   renderAll();
@@ -1916,6 +2146,640 @@ function exportActivities(format) {
   downloadFile("activity-log.csv", csv, "text/csv;charset=utf-8");
 }
 
+async function handleCreateOfferCode() {
+  if (!window.RTCPeerConnection) {
+    renderDeviceSyncStatus("This browser does not support live peer-to-peer device linking.", "error");
+    return;
+  }
+
+  try {
+    disconnectLiveSync({ silent: true });
+    const peerConnection = createPeerConnection("host");
+    const dataChannel = peerConnection.createDataChannel("activity-sync");
+    attachDataChannel(dataChannel);
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    await waitForIceGatheringComplete(peerConnection);
+
+    elements.hostOfferCode.value = encodeSignalPayload(peerConnection.localDescription);
+    elements.hostAnswerCodeInput.value = "";
+    renderDeviceSyncStatus("Connection code created. Share it with the second device, then paste the reply code here.", "neutral");
+  } catch (error) {
+    console.error("Unable to create connection code:", error);
+    renderDeviceSyncStatus("The connection code could not be created.", "error");
+  }
+}
+
+async function handleCreateAnswerCode() {
+  if (!window.RTCPeerConnection) {
+    renderDeviceSyncStatus("This browser does not support live peer-to-peer device linking.", "error");
+    return;
+  }
+
+  const offerCode = elements.joinOfferCodeInput.value.trim();
+
+  if (!offerCode) {
+    renderDeviceSyncStatus("Paste the first device's connection code before generating a reply.", "error");
+    return;
+  }
+
+  try {
+    disconnectLiveSync({ silent: true });
+    const peerConnection = createPeerConnection("join");
+    const remoteOffer = decodeSignalPayload(offerCode);
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    await waitForIceGatheringComplete(peerConnection);
+
+    elements.joinAnswerCodeOutput.value = encodeSignalPayload(peerConnection.localDescription);
+    renderDeviceSyncStatus("Reply code generated. Send it back to the first device to finish linking.", "neutral");
+  } catch (error) {
+    console.error("Unable to create reply code:", error);
+    renderDeviceSyncStatus("The reply code could not be created. Double-check the first device's code and try again.", "error");
+  }
+}
+
+async function handleAcceptAnswerCode() {
+  const answerCode = elements.hostAnswerCodeInput.value.trim();
+
+  if (!answerCode) {
+    renderDeviceSyncStatus("Paste the reply code from the second device before finishing the link.", "error");
+    return;
+  }
+
+  if (!runtime.peerConnection) {
+    renderDeviceSyncStatus("Create a connection code first on this device.", "error");
+    return;
+  }
+
+  try {
+    const remoteAnswer = decodeSignalPayload(answerCode);
+    await runtime.peerConnection.setRemoteDescription(new RTCSessionDescription(remoteAnswer));
+    renderDeviceSyncStatus("Reply code accepted. Waiting for the devices to complete their live link.", "neutral");
+  } catch (error) {
+    console.error("Unable to accept reply code:", error);
+    renderDeviceSyncStatus("That reply code could not be accepted. Make sure it came from the second device for this session.", "error");
+  }
+}
+
+function createPeerConnection(role) {
+  const peerConnection = new RTCPeerConnection({
+    iceServers: [
+      {
+        urls: "stun:stun.l.google.com:19302"
+      }
+    ]
+  });
+
+  runtime.peerConnection = peerConnection;
+  runtime.peerRole = role;
+
+  peerConnection.onconnectionstatechange = () => {
+    const connectionState = peerConnection.connectionState;
+
+    if (connectionState === "connected") {
+      renderDeviceSyncStatus("Devices are linked and live updates are active while both apps remain open.", "success");
+      broadcastSnapshotToPeer("initial-sync");
+      return;
+    }
+
+    if (["failed", "disconnected", "closed"].includes(connectionState)) {
+      if (runtime.peerConnection === peerConnection) {
+        disconnectLiveSync({ silent: true });
+      }
+
+      renderDeviceSyncStatus("The live device link ended. You can generate a new code to reconnect.", "error");
+      return;
+    }
+
+    renderDeviceSyncStatus(`Live link status: ${connectionState}.`, "neutral");
+  };
+
+  peerConnection.ondatachannel = (event) => {
+    attachDataChannel(event.channel);
+  };
+
+  return peerConnection;
+}
+
+function attachDataChannel(dataChannel) {
+  runtime.dataChannel = dataChannel;
+
+  dataChannel.onopen = () => {
+    renderDeviceSyncStatus("Devices are linked and live updates are active while both apps remain open.", "success");
+    broadcastSnapshotToPeer("initial-sync");
+  };
+
+  dataChannel.onclose = () => {
+    if (runtime.dataChannel === dataChannel) {
+      runtime.dataChannel = null;
+      renderDeviceSyncStatus("The live device link closed. You can create a new device code to reconnect.", "error");
+    }
+  };
+
+  dataChannel.onerror = (error) => {
+    console.error("Live sync data channel error:", error);
+    renderDeviceSyncStatus("The live device link hit an error.", "error");
+  };
+
+  dataChannel.onmessage = handlePeerMessage;
+}
+
+async function waitForIceGatheringComplete(peerConnection) {
+  if (peerConnection.iceGatheringState === "complete") {
+    return;
+  }
+
+  await new Promise((resolve) => {
+    function handleStateChange() {
+      if (peerConnection.iceGatheringState === "complete") {
+        peerConnection.removeEventListener("icegatheringstatechange", handleStateChange);
+        resolve();
+      }
+    }
+
+    peerConnection.addEventListener("icegatheringstatechange", handleStateChange);
+  });
+}
+
+function encodeSignalPayload(description) {
+  return window.btoa(JSON.stringify(description));
+}
+
+function decodeSignalPayload(encodedValue) {
+  return JSON.parse(window.atob(encodedValue.trim()));
+}
+
+function disconnectLiveSync(options = {}) {
+  if (runtime.dataChannel) {
+    runtime.dataChannel.close();
+    runtime.dataChannel = null;
+  }
+
+  if (runtime.peerConnection) {
+    runtime.peerConnection.close();
+    runtime.peerConnection = null;
+  }
+
+  runtime.peerRole = "";
+  elements.hostOfferCode.value = "";
+  elements.hostAnswerCodeInput.value = "";
+  elements.joinOfferCodeInput.value = "";
+  elements.joinAnswerCodeOutput.value = "";
+
+  if (!options.silent) {
+    renderDeviceSyncStatus("Live link disconnected. You can generate a new device code whenever you want to reconnect.", "neutral");
+  } else {
+    renderDeviceSyncStatus();
+  }
+}
+
+function broadcastSnapshotToPeer(reason = "update") {
+  if (!runtime.dataChannel || runtime.dataChannel.readyState !== "open") {
+    return;
+  }
+
+  runtime.dataChannel.send(JSON.stringify({
+    type: "snapshot",
+    reason,
+    sourceDeviceId: state.deviceId,
+    sentAt: getCurrentTimestamp(),
+    snapshot: getTransferSnapshot()
+  }));
+}
+
+function handlePeerMessage(event) {
+  try {
+    const payload = JSON.parse(event.data);
+
+    if (payload.type !== "snapshot" || !payload.snapshot) {
+      return;
+    }
+
+    runWithoutPeerBroadcast(() => {
+      const mergedSnapshot = mergeSnapshots(getTransferSnapshot(), payload.snapshot);
+      applySnapshotToState(mergedSnapshot);
+      saveAllData();
+      renderAll();
+    });
+
+    renderDeviceSyncStatus(`Live sync updated from device ${payload.sourceDeviceId || "unknown"}.`, "success");
+  } catch (error) {
+    console.error("Unable to process live sync message:", error);
+    renderDeviceSyncStatus("A live sync update could not be applied.", "error");
+  }
+}
+
+function runWithoutPeerBroadcast(work) {
+  runtime.isApplyingRemoteSync = true;
+
+  try {
+    work();
+  } finally {
+    runtime.isApplyingRemoteSync = false;
+  }
+}
+
+async function copyTextToClipboard(value, successMessage) {
+  if (!value.trim()) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(value);
+    renderDeviceSyncStatus(successMessage, "success");
+  } catch (error) {
+    console.error("Unable to copy text:", error);
+    renderDeviceSyncStatus("Copy failed. You can still select the code manually.", "error");
+  }
+}
+
+async function handleExportEncryptedBackup() {
+  if (!window.crypto?.subtle) {
+    setBackupStatus("This browser does not support encrypted backup in the required Web Crypto APIs.", "error");
+    return;
+  }
+
+  const passphrase = elements.backupPassphrase.value;
+  const confirmPassphrase = elements.backupPassphraseConfirm.value;
+
+  if (!passphrase || !confirmPassphrase) {
+    setBackupStatus("Enter and confirm a passphrase before downloading an encrypted backup.", "error");
+    return;
+  }
+
+  if (passphrase !== confirmPassphrase) {
+    setBackupStatus("The two passphrase entries do not match.", "error");
+    return;
+  }
+
+  if (passphrase.length < 8) {
+    setBackupStatus("Use a passphrase with at least 8 characters for the encrypted backup.", "error");
+    return;
+  }
+
+  try {
+    const payload = {
+      format: "local-activity-tracker-backup",
+      schemaVersion: DATA_SCHEMA_VERSION,
+      exportedAt: getCurrentTimestamp(),
+      sourceDeviceId: state.deviceId,
+      data: getTransferSnapshot()
+    };
+
+    const encryptedBackup = await encryptBackupPayload(payload, passphrase);
+    downloadFile(
+      `activity-tracker-backup-${toDateInputValue(new Date())}.json`,
+      JSON.stringify(encryptedBackup, null, 2),
+      "application/json"
+    );
+    elements.backupPassphrase.value = "";
+    elements.backupPassphraseConfirm.value = "";
+    setBackupStatus("Encrypted backup downloaded. Keep the passphrase safe because the backup cannot be opened without it.", "success");
+  } catch (error) {
+    console.error("Unable to create encrypted backup:", error);
+    setBackupStatus("The encrypted backup could not be created.", "error");
+  }
+}
+
+async function handleImportEncryptedBackup() {
+  if (!window.crypto?.subtle) {
+    setBackupStatus("This browser does not support encrypted import in the required Web Crypto APIs.", "error");
+    return;
+  }
+
+  const file = elements.importBackupFile.files?.[0];
+  const passphrase = elements.importBackupPassphrase.value;
+
+  if (!file) {
+    setBackupStatus("Choose an encrypted backup file before importing.", "error");
+    return;
+  }
+
+  if (!passphrase) {
+    setBackupStatus("Enter the backup passphrase before importing.", "error");
+    return;
+  }
+
+  try {
+    const fileContents = await file.text();
+    const encryptedBackup = JSON.parse(fileContents);
+    const decryptedPayload = await decryptBackupPayload(encryptedBackup, passphrase);
+
+    if (!decryptedPayload || decryptedPayload.format !== "local-activity-tracker-backup" || !decryptedPayload.data) {
+      throw new Error("Backup file format is not recognized.");
+    }
+
+    const mergedSnapshot = mergeSnapshots(getTransferSnapshot(), decryptedPayload.data);
+    applySnapshotToState(mergedSnapshot);
+    saveAllData();
+    renderAll();
+    elements.importBackupFile.value = "";
+    elements.importBackupPassphrase.value = "";
+    setBackupStatus(`Encrypted backup imported and merged from device ${decryptedPayload.sourceDeviceId || "unknown"}.`, "success");
+  } catch (error) {
+    console.error("Unable to import encrypted backup:", error);
+    setBackupStatus("The backup could not be imported. Check that the file and passphrase are correct.", "error");
+  }
+}
+
+function getTransferSnapshot() {
+  return {
+    groups: state.groups,
+    categories: state.categories,
+    activities: state.activities,
+    deletedActivities: state.deletedActivities,
+    presets: state.presets,
+    currentActivity: state.currentActivity
+  };
+}
+
+function applySnapshotToState(snapshot) {
+  const incomingGroups = snapshot.groups || [];
+  const incomingCategories = snapshot.categories || [];
+  const incomingActivities = snapshot.activities || [];
+  const incomingDeleted = snapshot.deletedActivities || [];
+  const incomingPresets = snapshot.presets || [];
+  const incomingCurrent = snapshot.currentActivity || null;
+  const legacyGroupNames = collectLegacyGroupNames(
+    incomingGroups,
+    incomingCategories,
+    incomingActivities,
+    incomingDeleted,
+    incomingPresets,
+    incomingCurrent
+  );
+
+  state.groups = normalizeStoredGroups(incomingGroups, legacyGroupNames);
+  state.categories = normalizeStoredCategories(incomingCategories);
+  state.activities = normalizeStoredActivities(incomingActivities);
+  state.deletedActivities = normalizeStoredActivities(incomingDeleted)
+    .sort((left, right) => getRecordTimestamp(right) - getRecordTimestamp(left))
+    .slice(0, 10);
+  state.presets = normalizeStoredPresets(incomingPresets);
+  state.currentActivity = normalizeStoredCurrentActivity(incomingCurrent);
+
+  clearManualEditingState();
+  clearPresetEditingState();
+  clearGroupEditingState();
+  clearCategoryEditingState();
+  clearForm();
+  clearManualForm();
+}
+
+function mergeSnapshots(localSnapshot, importedSnapshot) {
+  const mergedActivityState = mergeActivityState(
+    localSnapshot.activities || [],
+    localSnapshot.deletedActivities || [],
+    importedSnapshot.activities || [],
+    importedSnapshot.deletedActivities || []
+  );
+
+  return {
+    groups: mergeRecordCollections(localSnapshot.groups || [], importedSnapshot.groups || []),
+    categories: mergeRecordCollections(localSnapshot.categories || [], importedSnapshot.categories || []),
+    presets: mergeRecordCollections(localSnapshot.presets || [], importedSnapshot.presets || []),
+    activities: mergedActivityState.activities,
+    deletedActivities: mergedActivityState.deletedActivities,
+    currentActivity: mergeCurrentActivity(localSnapshot, importedSnapshot)
+  };
+}
+
+function mergeRecordCollections(localRecords, importedRecords) {
+  const mergedById = new Map();
+  const orderedIds = [];
+
+  [...localRecords, ...importedRecords].forEach((record) => {
+    if (!record || !record.id) {
+      return;
+    }
+
+    if (!mergedById.has(record.id)) {
+      orderedIds.push(record.id);
+      mergedById.set(record.id, record);
+      return;
+    }
+
+    mergedById.set(record.id, chooseNewerRecord(mergedById.get(record.id), record));
+  });
+
+  return orderedIds
+    .map((recordId) => mergedById.get(recordId))
+    .filter(Boolean);
+}
+
+function mergeActivityState(localActivities, localDeletedActivities, importedActivities, importedDeletedActivities) {
+  const combinedById = new Map();
+
+  function upsert(records, location) {
+    records.forEach((record) => {
+      if (!record || !record.id) {
+        return;
+      }
+
+      const candidate = {
+        ...record,
+        __location: location
+      };
+      const existing = combinedById.get(record.id);
+
+      if (!existing) {
+        combinedById.set(record.id, candidate);
+        return;
+      }
+
+      combinedById.set(record.id, chooseNewerRecord(existing, candidate));
+    });
+  }
+
+  upsert(localActivities, "active");
+  upsert(localDeletedActivities, "deleted");
+  upsert(importedActivities, "active");
+  upsert(importedDeletedActivities, "deleted");
+
+  const activities = [];
+  const deletedActivities = [];
+
+  combinedById.forEach((record) => {
+    const { __location, ...cleanRecord } = record;
+
+    if (__location === "deleted") {
+      deletedActivities.push(cleanRecord);
+      return;
+    }
+
+    activities.push(cleanRecord);
+  });
+
+  activities.sort((left, right) => getRecordTimestamp(right) - getRecordTimestamp(left));
+  deletedActivities.sort((left, right) => getRecordTimestamp(right) - getRecordTimestamp(left));
+
+  return {
+    activities,
+    deletedActivities: deletedActivities.slice(0, 10)
+  };
+}
+
+function chooseNewerRecord(leftRecord, rightRecord) {
+  if (!leftRecord) {
+    return rightRecord ? { ...rightRecord } : null;
+  }
+
+  if (!rightRecord) {
+    return { ...leftRecord };
+  }
+
+  const leftTimestamp = getRecordTimestamp(leftRecord);
+  const rightTimestamp = getRecordTimestamp(rightRecord);
+
+  if (rightTimestamp >= leftTimestamp) {
+    return { ...rightRecord };
+  }
+
+  return { ...leftRecord };
+}
+
+function mergeCurrentActivity(localSnapshot, importedSnapshot) {
+  const localCurrent = localSnapshot.currentActivity || null;
+  const importedCurrent = importedSnapshot.currentActivity || null;
+
+  if (localCurrent && !importedCurrent && hasCompletedVersionOfCurrentActivity(localCurrent, importedSnapshot.activities || [])) {
+    return null;
+  }
+
+  if (importedCurrent && !localCurrent && hasCompletedVersionOfCurrentActivity(importedCurrent, localSnapshot.activities || [])) {
+    return null;
+  }
+
+  return chooseNewerRecord(localCurrent, importedCurrent);
+}
+
+function hasCompletedVersionOfCurrentActivity(currentActivity, completedActivities) {
+  const matchingCompletedActivity = completedActivities.find((activity) => activity.id === currentActivity.id);
+
+  if (!matchingCompletedActivity) {
+    return false;
+  }
+
+  return getRecordTimestamp(matchingCompletedActivity) >= getRecordTimestamp(currentActivity);
+}
+
+function getRecordTimestamp(record) {
+  if (!record) {
+    return 0;
+  }
+
+  const timestamp = record.deletedAt || record.updatedAt || record.endTime || record.startTime || record.createdAt;
+  const timeValue = new Date(timestamp).getTime();
+  return Number.isNaN(timeValue) ? 0 : timeValue;
+}
+
+async function encryptBackupPayload(payload, passphrase) {
+  const salt = window.crypto.getRandomValues(new Uint8Array(16));
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const iterations = 250000;
+  const key = await derivePassphraseKey(passphrase, salt, iterations);
+  const encodedPayload = new TextEncoder().encode(JSON.stringify(payload));
+  const ciphertext = await window.crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv
+    },
+    key,
+    encodedPayload
+  );
+
+  return {
+    format: "local-activity-tracker-encrypted-backup",
+    version: 1,
+    algorithm: "AES-GCM",
+    kdf: "PBKDF2-SHA-256",
+    iterations,
+    salt: bytesToBase64(salt),
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
+    createdAt: getCurrentTimestamp(),
+    sourceDeviceId: state.deviceId
+  };
+}
+
+async function decryptBackupPayload(encryptedBackup, passphrase) {
+  if (!encryptedBackup || encryptedBackup.format !== "local-activity-tracker-encrypted-backup") {
+    throw new Error("Unrecognized encrypted backup format.");
+  }
+
+  const salt = base64ToBytes(encryptedBackup.salt);
+  const iv = base64ToBytes(encryptedBackup.iv);
+  const ciphertext = base64ToBytes(encryptedBackup.ciphertext);
+  const iterations = Number(encryptedBackup.iterations) || 250000;
+  const key = await derivePassphraseKey(passphrase, salt, iterations);
+  const decryptedBuffer = await window.crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv
+    },
+    key,
+    ciphertext
+  );
+
+  return JSON.parse(new TextDecoder().decode(decryptedBuffer));
+}
+
+async function derivePassphraseKey(passphrase, salt, iterations) {
+  const keyMaterial = await window.crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(passphrase),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"]
+  );
+
+  return window.crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations,
+      hash: "SHA-256"
+    },
+    keyMaterial,
+    {
+      name: "AES-GCM",
+      length: 256
+    },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+
+  bytes.forEach((value) => {
+    binary += String.fromCharCode(value);
+  });
+
+  return window.btoa(binary);
+}
+
+function base64ToBytes(base64Value) {
+  const binary = window.atob(base64Value);
+  const bytes = new Uint8Array(binary.length);
+
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+
+  return bytes;
+}
+
+function setBackupStatus(message, tone = "neutral") {
+  elements.backupStatus.textContent = message;
+  elements.backupStatus.className = `empty-state backup-status backup-status--${tone}`;
+}
+
 function downloadFile(filename, content, mimeType) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -1926,6 +2790,22 @@ function downloadFile(filename, content, mimeType) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function getOrCreateDeviceId() {
+  const existingId = localStorage.getItem(STORAGE_KEYS.deviceId);
+
+  if (existingId) {
+    return existingId;
+  }
+
+  const deviceId = `device-${createId()}`;
+  localStorage.setItem(STORAGE_KEYS.deviceId, deviceId);
+  return deviceId;
+}
+
+function getCurrentTimestamp() {
+  return new Date().toISOString();
 }
 
 function createId() {

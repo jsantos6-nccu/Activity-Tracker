@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Local Activity Tracker</title>
+  <desc id="desc">A rounded square icon with a timer ring, check mark, and signal dots.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#1f6f5f"/>
+      <stop offset="100%" stop-color="#d06e31"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="70" fill="none" stroke="#fff8ef" stroke-width="18" opacity="0.95"/>
+  <path d="M128 92v42l28 18" fill="none" stroke="#fff8ef" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>
+  <path d="M88 176l22 22 58-58" fill="none" stroke="#fff8ef" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/>
+  <circle cx="190" cy="70" r="10" fill="#fff8ef" opacity="0.95"/>
+  <circle cx="214" cy="92" r="8" fill="#fff8ef" opacity="0.85"/>
+</svg>

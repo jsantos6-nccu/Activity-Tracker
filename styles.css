@@ -36,7 +36,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -223,7 +224,8 @@ select {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
   min-height: 3rem;
   padding: 0.85rem 0.95rem;
@@ -233,8 +235,18 @@ select {
   color: var(--text);
 }
 
+.field input[type="file"] {
+  padding: 0.7rem 0.85rem;
+}
+
+.field-textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   outline: 3px solid rgba(31, 111, 95, 0.18);
   border-color: rgba(31, 111, 95, 0.4);
 }
@@ -564,6 +576,37 @@ select {
   color: var(--muted);
   background: rgba(241, 235, 227, 0.96);
   border: 1.5px dashed rgba(81, 60, 33, 0.28);
+}
+
+.backup-status {
+  margin-top: 0.25rem;
+}
+
+.install-status,
+.device-sync-status,
+.backup-status {
+  margin-top: 0.25rem;
+}
+
+.backup-status--success {
+  color: #184f36;
+  background: rgba(210, 239, 224, 0.96);
+  border-color: rgba(31, 111, 95, 0.28);
+}
+
+.backup-status--error,
+.install-status--error,
+.device-sync-status--error {
+  color: #6d2d28;
+  background: rgba(245, 223, 220, 0.97);
+  border-color: rgba(151, 71, 61, 0.28);
+}
+
+.install-status--success,
+.device-sync-status--success {
+  color: #184f36;
+  background: rgba(210, 239, 224, 0.96);
+  border-color: rgba(31, 111, 95, 0.28);
 }
 
 @media (max-width: 900px) {

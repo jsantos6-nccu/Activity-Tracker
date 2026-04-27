@@ -1,6 +1,6 @@
 # Local Activity Tracker
 
-A browser-based, mobile-friendly prototype for tracking work and personal activities with a simple Start/Stop workflow. All data is stored locally in the browser using `localStorage`, so the app can run privately without a backend, login, or database.
+A browser-based, mobile-friendly prototype for tracking work and personal activities with a simple Start/Stop workflow. By default, data is stored locally in the browser using `localStorage`, with optional peer-to-peer live linking and encrypted backup transfer for private multi-device use.
 
 ## Features
 
@@ -14,8 +14,12 @@ A browser-based, mobile-friendly prototype for tracking work and personal activi
 - Save common activities to a Frequently Used list for one-tap starting
 - View a history of completed activities
 - Delete incorrect entries, restore them from a recently deleted list, or permanently remove them
-- Use tabs to switch between Frequently Used, Label Manager, Recently Deleted, and Analytics
+- Use tabs to switch between Frequently Used, Label Manager, Recently Deleted, Devices, Private Backup, and Analytics
 - Store activity data locally in the browser with `localStorage`
+- Use a sync-ready local data model with stable record IDs and device metadata for future private multi-device support
+- Exchange live device codes to sync changes directly while both devices are open
+- Download and import encrypted full-app backups for private transfer between your own devices
+- Support installable web-app launching from a hosted URL on phone or desktop
 - Filter reports by date range
 - See total tracked time, top groups, top categories, daily details, and simple visual summaries
 - Export saved logs as `CSV` or `JSON`
@@ -47,6 +51,16 @@ If you prefer running from a local server, you can use any lightweight option su
 
 Then open the local address shown by the server in your browser.
 
+### Option 3: Host it at a URL for phone use
+
+To start from a phone, host the app at a web address such as:
+
+- GitHub Pages
+- Netlify
+- Vercel
+
+Then open that URL on the phone. From there, the `Devices` tab can be used for live linking, and supported browsers may offer `Install App` or `Add to Home Screen`.
+
 ## How the App Works
 
 1. Open the `Label Manager` tab and create at least one group, such as `Work`, `Personal`, or `Other`.
@@ -62,8 +76,10 @@ Then open the local address shown by the server in your browser.
 11. Save recurring activities to the `Frequently Used` tab for future one-tap tracking.
 12. Review saved entries in the history panel.
 13. If you delete something by mistake, restore it from the `Recently Deleted` tab or permanently delete it there.
-14. Use the `Analytics` tab for a ranged overview or switch to `Daily Detail` for a chosen-day timeline and breakdown.
-15. Export your data as `CSV` or `JSON` if needed.
+14. Use the `Devices` tab to generate a live connection code, paste the reply code from a second device, and keep both devices synced while both apps stay open.
+15. Use the `Analytics` tab for a ranged overview or switch to `Daily Detail` for a chosen-day timeline and breakdown.
+16. Export your data as `CSV` or `JSON` if needed.
+17. Use the `Private Backup` tab to download an encrypted full-app backup and merge it on another device with the same passphrase.
 
 ## Data Storage
 
@@ -73,8 +89,11 @@ Then open the local address shown by the server in your browser.
 - Category definitions are saved in `localStorage`
 - Recently deleted activities are also saved locally so they can be restored after a refresh
 - The currently running activity is also saved in `localStorage`
+- A consolidated local snapshot and per-device identifier are also stored to prepare for future sync features
+- Encrypted backup files can be created manually for private transfer between devices
 - Refreshing the page will preserve the running timer state and saved history in the same browser
 - Data stays on the local machine unless the user exports it manually
+- Live device linking is peer-to-peer and currently works while both devices are open during the same session
 
 ## Activity Data Model
 
@@ -93,6 +112,8 @@ Each completed activity stores:
 This MVP is intentionally lightweight. Useful next steps could include:
 
 - Editing a currently running activity's start time before stopping it
+- Persistent trusted-device pairing with reconnecting live sync
+- Automatic end-to-end encrypted multi-device sync without manual code exchange
 - More detailed charts
 - Daily or weekly summaries
 - Search and tag filtering

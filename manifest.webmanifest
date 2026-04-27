@@ -1,0 +1,17 @@
+{
+  "name": "Local Activity Tracker",
+  "short_name": "Activity Tracker",
+  "description": "A private-first activity tracker with local storage, analytics, and device linking.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f0e5",
+  "theme_color": "#1f6f5f",
+  "icons": [
+    {
+      "src": "app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

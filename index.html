@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1f6f5f">
   <title>Local Activity Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -19,7 +21,7 @@
       </div>
       <div class="hero__badge">
         <span class="badge-dot"></span>
-        Local only
+        Private first
       </div>
     </header>
 
@@ -126,6 +128,8 @@
           <button class="tab-button is-active" id="tabButtonPresets" type="button" role="tab" aria-selected="true" aria-controls="tabPanelPresets" data-tab="presets">Frequently Used</button>
           <button class="tab-button" id="tabButtonCategories" type="button" role="tab" aria-selected="false" aria-controls="tabPanelCategories" data-tab="categories">Label Manager</button>
           <button class="tab-button" id="tabButtonDeleted" type="button" role="tab" aria-selected="false" aria-controls="tabPanelDeleted" data-tab="deleted">Recently Deleted</button>
+          <button class="tab-button" id="tabButtonDevices" type="button" role="tab" aria-selected="false" aria-controls="tabPanelDevices" data-tab="devices">Devices</button>
+          <button class="tab-button" id="tabButtonBackup" type="button" role="tab" aria-selected="false" aria-controls="tabPanelBackup" data-tab="backup">Private Backup</button>
           <button class="tab-button" id="tabButtonAnalytics" type="button" role="tab" aria-selected="false" aria-controls="tabPanelAnalytics" data-tab="analytics">Analytics</button>
         </div>
 
@@ -182,6 +186,126 @@
         <section id="tabPanelDeleted" class="tab-panel stack-layout" role="tabpanel" aria-labelledby="tabButtonDeleted" data-tab-panel="deleted" hidden>
           <div id="deletedSummary" class="history-summary"></div>
           <div id="deletedList" class="history-list"></div>
+        </section>
+
+        <section id="tabPanelDevices" class="tab-panel stack-layout" role="tabpanel" aria-labelledby="tabButtonDevices" data-tab-panel="devices" hidden>
+          <p class="history-summary">Open the app from a shared URL on your phone or computer, then use a live device code exchange to sync changes directly while both devices are open.</p>
+
+          <div class="analytics-grid">
+            <section class="analytics-card stack-layout">
+              <div>
+                <p class="section-kicker">Launch</p>
+                <h3>Install or add to home screen</h3>
+              </div>
+              <p class="history-summary">Once the app is hosted at a URL, supported browsers can install it so it launches more like an app on phone or desktop.</p>
+              <div class="button-row">
+                <button id="installAppButton" class="secondary-button secondary-button--strong" type="button" hidden>Install App</button>
+              </div>
+              <div id="installStatus" class="empty-state">Install becomes available after opening the app from a supported web address in a compatible browser.</div>
+            </section>
+
+            <section class="analytics-card stack-layout">
+              <div>
+                <p class="section-kicker">Status</p>
+                <h3>Live sync connection</h3>
+              </div>
+              <div id="deviceSyncStatus" class="empty-state">No live device link is active yet.</div>
+              <div class="button-row">
+                <button id="disconnectDevicesButton" class="secondary-button" type="button" disabled>Disconnect Live Link</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="analytics-grid">
+            <section class="analytics-card stack-layout">
+              <div>
+                <p class="section-kicker">Device 1</p>
+                <h3>Create a connection code</h3>
+              </div>
+              <p class="history-summary">Start here on the first device. Generate a code, then share it with the second device.</p>
+              <div class="button-row">
+                <button id="createOfferButton" class="secondary-button secondary-button--strong" type="button">Create Connection Code</button>
+                <button id="copyOfferButton" class="secondary-button" type="button">Copy Code</button>
+              </div>
+              <label class="field">
+                <span>Connection code</span>
+                <textarea id="hostOfferCode" class="field-textarea" rows="6" readonly placeholder="Your live-link code will appear here after you create it."></textarea>
+              </label>
+              <label class="field">
+                <span>Reply code from second device</span>
+                <textarea id="hostAnswerCodeInput" class="field-textarea" rows="5" placeholder="Paste the reply code from the second device here."></textarea>
+              </label>
+              <div class="button-row">
+                <button id="acceptAnswerButton" class="secondary-button secondary-button--strong" type="button">Finish Linking Devices</button>
+              </div>
+            </section>
+
+            <section class="analytics-card stack-layout">
+              <div>
+                <p class="section-kicker">Device 2</p>
+                <h3>Join with a connection code</h3>
+              </div>
+              <p class="history-summary">Paste the code from the first device, then return the reply code it generates.</p>
+              <label class="field">
+                <span>Connection code from first device</span>
+                <textarea id="joinOfferCodeInput" class="field-textarea" rows="6" placeholder="Paste the first device's code here."></textarea>
+              </label>
+              <div class="button-row">
+                <button id="createAnswerButton" class="secondary-button secondary-button--strong" type="button">Generate Reply Code</button>
+                <button id="copyAnswerButton" class="secondary-button" type="button">Copy Reply</button>
+              </div>
+              <label class="field">
+                <span>Reply code</span>
+                <textarea id="joinAnswerCodeOutput" class="field-textarea" rows="5" readonly placeholder="The reply code for the first device will appear here."></textarea>
+              </label>
+            </section>
+          </div>
+        </section>
+
+        <section id="tabPanelBackup" class="tab-panel stack-layout" role="tabpanel" aria-labelledby="tabButtonBackup" data-tab-panel="backup" hidden>
+          <p class="history-summary">Create an encrypted backup for private transfer between your own devices, then import and merge it with a passphrase.</p>
+
+          <div class="analytics-grid">
+            <section class="analytics-card stack-layout">
+              <div>
+                <p class="section-kicker">Export</p>
+                <h3>Download encrypted backup</h3>
+              </div>
+
+              <label class="field">
+                <span>Passphrase</span>
+                <input id="backupPassphrase" type="password" placeholder="Create a strong passphrase" autocomplete="new-password">
+              </label>
+
+              <label class="field">
+                <span>Confirm passphrase</span>
+                <input id="backupPassphraseConfirm" type="password" placeholder="Re-enter the same passphrase" autocomplete="new-password">
+              </label>
+
+              <button id="exportBackupButton" class="secondary-button secondary-button--strong" type="button">Download Encrypted Backup</button>
+            </section>
+
+            <section class="analytics-card stack-layout">
+              <div>
+                <p class="section-kicker">Import</p>
+                <h3>Merge encrypted backup</h3>
+              </div>
+
+              <label class="field">
+                <span>Backup file</span>
+                <input id="importBackupFile" type="file" accept=".json,.latbackup">
+              </label>
+
+              <label class="field">
+                <span>Passphrase</span>
+                <input id="importBackupPassphrase" type="password" placeholder="Enter the backup passphrase" autocomplete="current-password">
+              </label>
+
+              <button id="importBackupButton" class="secondary-button secondary-button--strong" type="button">Import and Merge Backup</button>
+            </section>
+          </div>
+
+          <div id="backupStatus" class="empty-state">Encrypted backups let you move private data between devices without exporting readable activity logs.</div>
         </section>
 
         <section id="tabPanelAnalytics" class="tab-panel stack-layout" role="tabpanel" aria-labelledby="tabButtonAnalytics" data-tab-panel="analytics" hidden>
